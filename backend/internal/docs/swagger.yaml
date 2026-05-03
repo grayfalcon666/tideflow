@@ -1,0 +1,1378 @@
+definitions:
+  handler.ChangePasswordRequest:
+    properties:
+      new_password:
+        maxLength: 128
+        minLength: 6
+        type: string
+      old_password:
+        type: string
+      username:
+        type: string
+    required:
+    - new_password
+    - old_password
+    - username
+    type: object
+  handler.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  handler.MarkReadRequest:
+    properties:
+      ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  handler.PublishCommentRequest:
+    properties:
+      content:
+        type: string
+      parent_id:
+        type: integer
+      root_id:
+        type: integer
+    required:
+    - content
+    type: object
+  handler.PublishVideoRequest:
+    properties:
+      cover_url:
+        type: string
+      description:
+        type: string
+      play_url:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    required:
+    - cover_url
+    - play_url
+    - title
+    type: object
+  handler.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  handler.RegisterRequest:
+    properties:
+      password:
+        maxLength: 128
+        minLength: 6
+        type: string
+      username:
+        maxLength: 30
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  handler.SendMessageRequest:
+    properties:
+      content:
+        type: string
+      to_id:
+        type: integer
+    required:
+    - content
+    - to_id
+    type: object
+  handler.UpdateProfileRequest:
+    properties:
+      avatar_url:
+        type: string
+      bio:
+        type: string
+    type: object
+  handler.UpdateUsernameRequest:
+    properties:
+      username:
+        maxLength: 30
+        minLength: 3
+        type: string
+    required:
+    - username
+    type: object
+  handler.UpdateVideoRequest:
+    properties:
+      cover_url:
+        type: string
+      description:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  response.PageResponse:
+    properties:
+      has_more:
+        type: boolean
+      items: {}
+      next_cursor:
+        type: string
+    type: object
+  response.Response:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+    type: object
+  response.TokenResponse:
+    properties:
+      access_token:
+        type: string
+      account_id:
+        type: integer
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 使用用户名密码登录，返回access_token和refresh_token
+      parameters:
+      - description: 登录信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 用户登录
+      tags:
+      - 认证
+  /api/v1/auth/logout:
+    post:
+      description: 使当前access_token失效
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 用户登出
+      tags:
+      - 认证
+  /api/v1/auth/password:
+    post:
+      consumes:
+      - application/json
+      description: 用户修改密码，需要提供旧密码验证
+      parameters:
+      - description: 密码修改信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 修改密码
+      tags:
+      - 认证
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: 使用refresh_token获取新的access_token和refresh_token
+      parameters:
+      - description: 刷新令牌
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 刷新令牌
+      tags:
+      - 认证
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: 注册新用户，返回access_token和refresh_token
+      parameters:
+      - description: 注册信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 用户注册
+      tags:
+      - 认证
+  /api/v1/feed/following:
+    get:
+      description: 获取当前用户关注的人的发布视频
+      parameters:
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 关注流
+      tags:
+      - 时间线
+  /api/v1/feed/latest:
+    get:
+      description: 获取全局最新视频列表，按时间倒序
+      parameters:
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+      summary: 全局最新Feed
+      tags:
+      - 时间线
+  /api/v1/feed/popular:
+    get:
+      description: 获取热门视频列表，按热度降序
+      parameters:
+      - default: "0"
+        description: 偏移量游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      - default: 1h
+        description: 时间窗口
+        in: query
+        name: window
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+      summary: 热门榜单
+      tags:
+      - 时间线
+  /api/v1/feed/tag:
+    get:
+      description: 通过标签搜索视频列表
+      parameters:
+      - description: 标签名
+        in: query
+        name: tag
+        required: true
+        type: string
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 按标签搜索视频
+      tags:
+      - 时间线
+  /api/v1/likes/mine:
+    get:
+      description: 获取当前用户点赞过的视频列表
+      parameters:
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 我点赞过的视频
+      tags:
+      - 互动
+  /api/v1/messages:
+    post:
+      consumes:
+      - application/json
+      description: 向指定用户发送私信
+      parameters:
+      - description: 私信内容
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.SendMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 发送私信
+      tags:
+      - 私信
+  /api/v1/messages/conversations:
+    get:
+      description: 获取当前用户的会话列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 会话列表
+      tags:
+      - 私信
+  /api/v1/messages/conversations/{user_id}:
+    get:
+      description: 获取与指定用户的聊天记录
+      parameters:
+      - description: 用户ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取消息记录
+      tags:
+      - 私信
+  /api/v1/messages/conversations/{user_id}/read:
+    put:
+      description: 标记与指定用户的会话为已读
+      parameters:
+      - description: 用户ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 标记会话已读
+      tags:
+      - 私信
+  /api/v1/notifications:
+    get:
+      description: 获取当前用户的通知列表
+      parameters:
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 通知列表
+      tags:
+      - 通知
+  /api/v1/notifications/read:
+    put:
+      consumes:
+      - application/json
+      description: 标记通知为已读，传入IDs只标记指定通知，不传或空数组标记全部
+      parameters:
+      - description: 通知ID列表
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handler.MarkReadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 标记通知已读
+      tags:
+      - 通知
+  /api/v1/notifications/stream:
+    get:
+      description: 建立SSE连接，接收实时通知推送
+      parameters:
+      - description: 访问令牌
+        in: query
+        name: token
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE事件流
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: SSE实时通知
+      tags:
+      - 通知
+  /api/v1/notifications/unread-count:
+    get:
+      description: 获取当前用户未读通知的数量
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 未读通知数
+      tags:
+      - 通知
+  /api/v1/tags/hot:
+    get:
+      description: 获取当前热门标签列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 热门标签
+      tags:
+      - 标签
+  /api/v1/users/{id}:
+    get:
+      description: 通过用户ID获取用户公开信息
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取指定用户信息
+      tags:
+      - 用户资料
+  /api/v1/users/{id}/followers:
+    get:
+      description: 获取指定用户的粉丝列表
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取粉丝列表
+      tags:
+      - 社交关系
+  /api/v1/users/{id}/following:
+    get:
+      description: 获取指定用户的关注列表
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取关注列表
+      tags:
+      - 社交关系
+  /api/v1/users/{id}/social-counts:
+    get:
+      description: 获取指定用户的关注数和粉丝数
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取社交数量
+      tags:
+      - 社交关系
+  /api/v1/users/{id}/videos:
+    get:
+      description: 获取指定用户发布的视频列表
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取用户视频列表
+      tags:
+      - 用户资料
+  /api/v1/users/{user_id}/follow:
+    delete:
+      description: 当前用户取消关注指定用户
+      parameters:
+      - description: 目标用户ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 取消关注
+      tags:
+      - 社交关系
+    post:
+      description: 当前用户关注指定用户
+      parameters:
+      - description: 目标用户ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 关注用户
+      tags:
+      - 社交关系
+  /api/v1/users/me:
+    get:
+      description: 获取已登录用户的信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户信息
+      tags:
+      - 用户资料
+    put:
+      consumes:
+      - application/json
+      description: 更新当前用户的头像和简介
+      parameters:
+      - description: 更新信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新个人资料
+      tags:
+      - 用户资料
+  /api/v1/users/me/username:
+    put:
+      consumes:
+      - application/json
+      description: 修改当前用户的用户名
+      parameters:
+      - description: 新用户名
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UpdateUsernameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 修改用户名
+      tags:
+      - 用户资料
+  /api/v1/users/username/{username}:
+    get:
+      description: 通过用户名获取用户公开信息
+      parameters:
+      - description: 用户名
+        in: path
+        name: username
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 通过用户名查找用户
+      tags:
+      - 用户资料
+  /api/v1/videos:
+    post:
+      consumes:
+      - application/json
+      description: 发布一个新视频
+      parameters:
+      - description: 视频信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.PublishVideoRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 发布视频
+      tags:
+      - 视频
+  /api/v1/videos/{id}:
+    delete:
+      description: 软删除视频，仅作者可删除
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除视频
+      tags:
+      - 视频
+    get:
+      description: 通过视频ID获取视频详细信息
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取视频详情
+      tags:
+      - 视频
+    put:
+      consumes:
+      - application/json
+      description: 更新视频的标题、描述、封面或标签
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UpdateVideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新视频信息
+      tags:
+      - 视频
+  /api/v1/videos/{id}/comments:
+    get:
+      description: 获取视频的评论列表
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      - description: 根评论ID
+        in: query
+        name: root_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 评论列表
+      tags:
+      - 互动
+    post:
+      consumes:
+      - application/json
+      description: 对视频发表评论或回复
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 评论内容
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.PublishCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 发表评论
+      tags:
+      - 互动
+  /api/v1/videos/{id}/comments/{comment_id}:
+    delete:
+      description: 删除指定评论，仅评论作者可删除
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 评论ID
+        in: path
+        name: comment_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除评论
+      tags:
+      - 互动
+  /api/v1/videos/{id}/like:
+    delete:
+      description: 取消对指定视频的点赞
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 取消点赞
+      tags:
+      - 互动
+    get:
+      description: 检查当前用户是否点赞了指定视频
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 检查是否点赞
+      tags:
+      - 互动
+    post:
+      description: 给指定视频点赞，幂等操作
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 点赞视频
+      tags:
+      - 互动
+  /api/v1/videos/cover:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传视频封面图片，返回封面URL
+      parameters:
+      - description: 封面图片
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 上传封面
+      tags:
+      - 视频
+  /api/v1/videos/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传视频文件，返回播放URL
+      parameters:
+      - description: 视频文件
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 上传视频文件
+      tags:
+      - 视频
+swagger: "2.0"
