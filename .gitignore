@@ -1,0 +1,48 @@
+# Environment
+.env
+.env.local
+
+# Docs and config (generated)
+docs/
+
+# Claude
+.claude/
+
+# Uploads
+uploads/
+*.mp4
+*.jpg
+*.jpeg
+*.png
+
+# Go
+backend/vendor/
+backend/*.exe
+backend/*.exe~
+backend/*.dll
+backend/*.so
+backend/*.dylib
+backend/*.test
+backend/*.out
+backend/tideflow-api
+backend/tideflow-worker
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+docker-compose.override.yml
+
+# Test
+test/
