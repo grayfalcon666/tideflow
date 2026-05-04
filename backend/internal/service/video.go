@@ -113,7 +113,9 @@ func (s *VideoService) PublishVideo(ctx context.Context, authorID uint, username
 }
 
 func (s *VideoService) GetVideoByID(ctx context.Context, id uint) (*models.Video, error) {
-	video, err := s.repo.GetVideoByID(ctx, id)
+	video, err := s.cache.GetVideoDetail(ctx, id, func(ctx context.Context, id uint) (*models.Video, error) {
+		return s.repo.GetVideoByID(ctx, id)
+	})
 	if err != nil {
 		return nil, ErrVideoNotFound
 	}

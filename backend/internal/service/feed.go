@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -129,22 +130,7 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 		}
 	}
 
-	type videoScore struct {
-		video *models.Video
-		score float64
-	}
-	var all []videoScore
-
-	inboxKey := infraredis.Inbox(userID)
-	inboxIDs, _ := s.rdb.ZRevRange(ctx, inboxKey, 0, 500).Result()
-	for _, idStr := range inboxIDs {
-		id, _ := strconv.ParseUint(idStr, 10, 64)
-		videos, _ := s.cache.GetVideoByIDs(ctx, []uint{uint(id)})
-		if len(videos) > 0 && videos[0] != nil {
-			all = append(all, videoScore{videos[0], float64(videos[0].CreateTime.UnixMilli())})
-		}
-	}
-
+	// Split following into big-V and normal bloggers
 	var bigVs, normals []uint
 	for _, fid := range followingIDs {
 		acc, _ := s.repo.GetAccountByID(ctx, fid)
@@ -155,23 +141,29 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 		}
 	}
 
-	for _, bvID := range bigVs {
-		outboxKey := infraredis.Outbox(bvID)
-		ids, _ := s.rdb.ZRevRange(ctx, outboxKey, 0, 200).Result()
-		for _, idStr := range ids {
+	type videoScore struct {
+		video *models.Video
+		score float64
+	}
+	var all []videoScore
+
+	// ── Hot path: Inbox + big-V Outbox (only when no cursor / first page) ──
+	if before.IsZero() {
+		// Inbox: pull up to 500 recent entries
+		inboxKey := infraredis.Inbox(userID)
+		inboxIDs, _ := s.rdb.ZRevRange(ctx, inboxKey, 0, 499).Result()
+		for _, idStr := range inboxIDs {
 			id, _ := strconv.ParseUint(idStr, 10, 64)
 			videos, _ := s.cache.GetVideoByIDs(ctx, []uint{uint(id)})
 			if len(videos) > 0 && videos[0] != nil {
 				all = append(all, videoScore{videos[0], float64(videos[0].CreateTime.UnixMilli())})
 			}
 		}
-	}
 
-	if !before.IsZero() || len(all) < limit {
-		cacheKey := infraredis.FeedCache(userID, cursor, limit)
-		cached, _ := s.rdb.ZRange(ctx, cacheKey, 0, -1).Result()
-		if len(cached) > 0 {
-			for _, idStr := range cached {
+		// Big-V outboxes: up to 200 each
+		for _, bvID := range bigVs {
+			ids, _ := s.rdb.ZRevRange(ctx, infraredis.Outbox(bvID), 0, 199).Result()
+			for _, idStr := range ids {
 				id, _ := strconv.ParseUint(idStr, 10, 64)
 				videos, _ := s.cache.GetVideoByIDs(ctx, []uint{uint(id)})
 				if len(videos) > 0 && videos[0] != nil {
@@ -181,6 +173,54 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 		}
 	}
 
+	// ── Cold path: check / build follow cache ──
+	cacheKey := infraredis.FeedCache(userID, cursor, limit)
+	cached, _ := s.rdb.ZRange(ctx, cacheKey, 0, -1).Result()
+	if len(cached) == 0 && len(normals) > 0 {
+		// Cache miss — rebuild via singleflight-protected cold pull
+		cacheKeyForBuild := infraredis.FeedCache(userID, cursor, limit)
+		s.cache.RebuildFollowCache(ctx, userID, before, limit, normals,
+			func(ctx context.Context, authorID uint, before time.Time, limit int) ([]string, error) {
+				key := infraredis.Outbox(authorID)
+				var ids []string
+				var err error
+				if before.IsZero() {
+					ids, err = s.rdb.ZRange(ctx, key, 0, int64(limit-1)).Result()
+				} else {
+					ids, err = s.rdb.ZRevRangeByScore(ctx, key, &goredis.ZRangeBy{
+						Min:   "-inf",
+						Max:   fmt.Sprintf("%d", before.UnixMilli()),
+						Count: int64(limit),
+					}).Result()
+				}
+				if err != nil || len(ids) == 0 {
+					// Fallback: pull from DB
+					dbVideos, dbErr := s.repo.GetVideosByAuthor(ctx, authorID, before, limit)
+					if dbErr != nil || len(dbVideos) == 0 {
+						return nil, dbErr
+					}
+					ids = make([]string, len(dbVideos))
+					for i, v := range dbVideos {
+						ids[i] = fmt.Sprintf("%d", v.ID)
+					}
+				}
+				return ids, err
+			},
+		)
+		// Re-read after rebuild
+		cached, _ = s.rdb.ZRange(ctx, cacheKeyForBuild, 0, -1).Result()
+	}
+
+	// Merge cold cache entries
+	for _, idStr := range cached {
+		id, _ := strconv.ParseUint(idStr, 10, 64)
+		videos, _ := s.cache.GetVideoByIDs(ctx, []uint{uint(id)})
+		if len(videos) > 0 && videos[0] != nil {
+			all = append(all, videoScore{videos[0], float64(videos[0].CreateTime.UnixMilli())})
+		}
+	}
+
+	// ── Sort and dedup ──
 	for i := 0; i < len(all)-1; i++ {
 		for j := i + 1; j < len(all); j++ {
 			if all[j].score > all[i].score {
@@ -188,13 +228,20 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 			}
 		}
 	}
-
-	if len(all) > limit {
-		all = all[:limit]
+	seen := make(map[uint]bool)
+	deduped := make([]videoScore, 0, len(all))
+	for _, vs := range all {
+		if !seen[vs.video.ID] {
+			seen[vs.video.ID] = true
+			deduped = append(deduped, vs)
+		}
+	}
+	if len(deduped) > limit {
+		deduped = deduped[:limit]
 	}
 
-	videos := make([]*models.Video, len(all))
-	for i, vs := range all {
+	videos := make([]*models.Video, len(deduped))
+	for i, vs := range deduped {
 		videos[i] = vs.video
 	}
 

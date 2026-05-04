@@ -50,6 +50,7 @@ func main() {
 	}
 
 	cache := infraredis.NewCache(rdb)
+	cache.SetLock(infraredis.NewLock(rdb))
 	rateLimiter := infraredis.NewRateLimiter(rdb)
 
 	repo := repository.New(db)

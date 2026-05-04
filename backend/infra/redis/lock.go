@@ -17,6 +17,15 @@ func NewLock(rdb *redis.Client) *Lock {
 
 func (l *Lock) Acquire(ctx context.Context, target string, token string, ttl time.Duration) (bool, error) {
 	key := LockKey(target)
+	return l.acquire(ctx, key, token, ttl)
+}
+
+func (l *Lock) AcquireDetail(ctx context.Context, id uint, token string, ttl time.Duration) (bool, error) {
+	key := LockDetail(id)
+	return l.acquire(ctx, key, token, ttl)
+}
+
+func (l *Lock) acquire(ctx context.Context, key, token string, ttl time.Duration) (bool, error) {
 	ok, err := l.rdb.SetNX(ctx, key, token, ttl).Result()
 	if err != nil {
 		return false, err
@@ -24,7 +33,6 @@ func (l *Lock) Acquire(ctx context.Context, target string, token string, ttl tim
 	if !ok {
 		return false, nil
 	}
-
 	lua := `
 if redis.call('GET', KEYS[1]) == ARGV[1] then
     return redis.call('DEL', KEYS[1])
@@ -38,6 +46,15 @@ end
 
 func (l *Lock) Release(ctx context.Context, target string, token string) error {
 	key := LockKey(target)
+	return l.release(ctx, key, token)
+}
+
+func (l *Lock) ReleaseDetail(ctx context.Context, id uint, token string) error {
+	key := LockDetail(id)
+	return l.release(ctx, key, token)
+}
+
+func (l *Lock) release(ctx context.Context, key, token string) error {
 	lua := `
 if redis.call('GET', KEYS[1]) == ARGV[1] then
     return redis.call('DEL', KEYS[1])

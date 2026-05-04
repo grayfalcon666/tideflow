@@ -74,8 +74,14 @@ func RateLimit(action, subject string) string {
 	return fmt.Sprintf("%s:"+KeyRateLimit, Version, action, subject)
 }
 
+// LockKey returns a versioned lock key. Prefer typed functions below.
 func LockKey(target string) string {
 	return fmt.Sprintf("%s:"+KeyLock, Version, target)
+}
+
+// LockDetail returns the distributed lock key for video detail cache.
+func LockDetail(id uint) string {
+	return fmt.Sprintf("%s:lock:detail:%d", Version, id)
 }
 
 func BigVMark(uid uint) string {
