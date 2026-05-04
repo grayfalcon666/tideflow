@@ -62,6 +62,7 @@ func main() {
 	interactionSvc := service.NewInteractionService(repo, mqInstance)
 	msgSvc := service.NewMessageService(repo)
 	notifSvc := service.NewNotificationService(repo)
+	tagSvc := service.NewTagService(repo)
 
 	authMw := middleware.NewAuthMiddleware(authSvc)
 	rateLimitMw := middleware.NewRateLimitMiddleware(rateLimiter)
@@ -74,7 +75,7 @@ func main() {
 	msgHandler := handler.NewMessageHandler(msgSvc)
 	notifHandler := handler.NewNotificationHandler(notifSvc)
 	sseHandler := handler.NewSSEHandler(nil)
-	tagHandler := handler.NewTagHandler()
+	tagHandler := handler.NewTagHandler(tagSvc)
 
 	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler)
 

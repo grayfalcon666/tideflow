@@ -127,10 +127,13 @@ func (s *InteractionService) GetLikedVideos(ctx context.Context, userID uint, cu
 }
 
 func parseCursorInt64(s string) (int64, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty string")
+	}
 	var v int64
 	for i := 0; i < len(s); i++ {
 		if s[i] < '0' || s[i] > '9' {
-			return 0, nil
+			return 0, fmt.Errorf("non-numeric character")
 		}
 		v = v*10 + int64(s[i]-'0')
 	}

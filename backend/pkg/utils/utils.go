@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -27,17 +28,20 @@ func ParseCursor(cursor string) (int64, bool) {
 		return 0, false
 	}
 	var ts int64
-	_, err := parseCursorInt64(cursor, &ts)
-	if err != nil {
+	ok, err := parseCursorInt64(cursor, &ts)
+	if err != nil || !ok {
 		return 0, false
 	}
 	return ts, true
 }
 
 func parseCursorInt64(s string, v *int64) (bool, error) {
+	if s == "" {
+		return false, fmt.Errorf("empty string")
+	}
 	for i := 0; i < len(s); i++ {
 		if s[i] < '0' || s[i] > '9' {
-			return false, nil
+			return false, fmt.Errorf("non-numeric character")
 		}
 	}
 	var val int64

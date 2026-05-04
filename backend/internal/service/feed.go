@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -74,8 +75,9 @@ func (s *FeedService) ListPopular(ctx context.Context, offset, limit int, window
 
 	count, _ := s.rdb.ZCard(ctx, mergeKey).Result()
 	if count == 0 {
-		keys := make([]string, 60)
-		for i := 0; i < 60; i++ {
+		minutes := windowToMinutes(window)
+		keys := make([]string, minutes)
+		for i := 0; i < minutes; i++ {
 			t, _ := time.Parse("200601021504", ts)
 			t = t.Add(-time.Duration(i) * time.Minute)
 			keys[i] = infraredis.HotVideo(window, t.Format("200601021504"))
@@ -262,13 +264,9 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 	}
 
 	// ── 排序去重 ─────────────────────────────────────────────────────────
-	for i := 0; i < len(all)-1; i++ {
-		for j := i + 1; j < len(all); j++ {
-			if all[j].score > all[i].score {
-				all[i], all[j] = all[j], all[i]
-			}
-		}
-	}
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].score > all[j].score
+	})
 	seen := make(map[uint]bool)
 	deduped := make([]videoScore, 0, len(all))
 	for _, vs := range all {
@@ -293,6 +291,24 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 	}
 
 	return videos, nextCursor, len(videos) == limit, nil
+}
+
+// windowToMinutes converts a window string to number of minutes to aggregate.
+func windowToMinutes(window string) int {
+	switch window {
+	case "1m":
+		return 1
+	case "5m":
+		return 5
+	case "15m":
+		return 15
+	case "1h":
+		return 60
+	case "6h":
+		return 360
+	default:
+		return 60
+	}
 }
 
 func normalsMapToSlice(m map[uint]bool) []uint {

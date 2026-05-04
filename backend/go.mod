@@ -11,12 +11,13 @@ require (
 	github.com/spf13/viper v1.18.2
 	golang.org/x/crypto v0.40.0
 	golang.org/x/sync v0.16.0
-	gorm.io/driver/mysql v1.6.0
+	gorm.io/driver/mysql v1.5.4
 	gorm.io/gorm v1.31.1
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect

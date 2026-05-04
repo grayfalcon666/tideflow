@@ -6,6 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"tideflow/internal/mq"
+	"tideflow/internal/service"
+	"tideflow/pkg/response"
 )
 
 type SSEHandler struct {
@@ -54,10 +56,11 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 }
 
 type TagHandler struct {
+	tag *service.TagService
 }
 
-func NewTagHandler() *TagHandler {
-	return &TagHandler{}
+func NewTagHandler(tag *service.TagService) *TagHandler {
+	return &TagHandler{tag: tag}
 }
 
 // @Summary 热门标签
@@ -67,11 +70,13 @@ func NewTagHandler() *TagHandler {
 // @Success 200 {object} response.Response
 // @Router /api/v1/tags/hot [get]
 func (h *TagHandler) GetHotTags(c *gin.Context) {
-	tags := []string{"搞笑", "音乐", "游戏"}
-	c.JSON(200, gin.H{
-		"code": 0,
-		"data": gin.H{
-			"tags": tags,
-		},
-	})
+	tags, err := h.tag.GetHotTags(c.Request.Context(), 20)
+	if err != nil {
+		response.InternalServerError(c, err.Error())
+		return
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+	response.Success(c, gin.H{"tags": tags})
 }

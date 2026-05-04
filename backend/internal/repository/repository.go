@@ -442,3 +442,16 @@ func (r *Repository) GetFollowersWithCursor(ctx context.Context, vloggerID uint,
 	err = query.Order("id DESC").Limit(limit).Find(&accounts).Error
 	return accounts, err
 }
+
+func (r *Repository) GetHotTags(ctx context.Context, limit int) ([]models.Tag, error) {
+	var tags []models.Tag
+	err := r.db.WithContext(ctx).
+		Table("tags").
+		Select("tags.*, COUNT(video_tags.video_id) as video_count").
+		Joins("LEFT JOIN video_tags ON tags.id = video_tags.tag_id").
+		Group("tags.id").
+		Order("video_count DESC").
+		Limit(limit).
+		Find(&tags).Error
+	return tags, err
+}
