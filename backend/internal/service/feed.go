@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -130,15 +131,42 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 		}
 	}
 
-	// Split following into big-V and normal bloggers
+	// ── 大V判定：优先读 Redis BigVMark，miss 时查 DB 并回写 ──────────────
 	var bigVs, normals []uint
 	for _, fid := range followingIDs {
-		acc, _ := s.repo.GetAccountByID(ctx, fid)
-		if acc != nil && acc.FollowerCount >= s.bigVThresh {
+		isBigV, _ := s.rdb.Exists(ctx, infraredis.BigVMark(fid)).Result()
+		if isBigV > 0 {
 			bigVs = append(bigVs, fid)
 		} else {
 			normals = append(normals, fid)
 		}
+	}
+
+	// 对于 normals，补充 DB 查询确认（BigVMark miss 不代表不是大V）
+	if len(normals) > 0 {
+		bigVUpdates := make([]uint, 0)
+		for _, fid := range normals {
+			acc, err := s.repo.GetAccountByID(ctx, fid)
+			if err == nil && acc != nil {
+				if acc.FollowerCount >= s.bigVThresh {
+					bigVs = append(bigVs, fid)
+					bigVUpdates = append(bigVUpdates, fid)
+				}
+			}
+		}
+		// 回写 BigVMark（TTL 1h）
+		for _, fid := range bigVUpdates {
+			s.rdb.Set(ctx, infraredis.BigVMark(fid), "1", time.Hour)
+		}
+		// normals 重新计算（排除已被确认大V的）
+		normalsMap := make(map[uint]bool)
+		for _, fid := range normals {
+			normalsMap[fid] = true
+		}
+		for _, fid := range bigVUpdates {
+			delete(normalsMap, fid)
+		}
+		normals = normalsMapToSlice(normalsMap)
 	}
 
 	type videoScore struct {
@@ -147,11 +175,10 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 	}
 	var all []videoScore
 
-	// ── Hot path: Inbox + big-V Outbox (only when no cursor / first page) ──
+	// ── 热路径：Inbox + 并行大V Outbox（仅首页/无 cursor） ──────────────
 	if before.IsZero() {
-		// Inbox: pull up to 500 recent entries
-		inboxKey := infraredis.Inbox(userID)
-		inboxIDs, _ := s.rdb.ZRevRange(ctx, inboxKey, 0, 499).Result()
+		// Inbox：取 500 条
+		inboxIDs, _ := s.rdb.ZRevRange(ctx, infraredis.Inbox(userID), 0, 499).Result()
 		for _, idStr := range inboxIDs {
 			id, _ := strconv.ParseUint(idStr, 10, 64)
 			videos, _ := s.cache.GetVideoByIDs(ctx, []uint{uint(id)})
@@ -160,58 +187,72 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 			}
 		}
 
-		// Big-V outboxes: up to 200 each
-		for _, bvID := range bigVs {
-			ids, _ := s.rdb.ZRevRange(ctx, infraredis.Outbox(bvID), 0, 199).Result()
-			for _, idStr := range ids {
-				id, _ := strconv.ParseUint(idStr, 10, 64)
-				videos, _ := s.cache.GetVideoByIDs(ctx, []uint{uint(id)})
-				if len(videos) > 0 && videos[0] != nil {
-					all = append(all, videoScore{videos[0], float64(videos[0].CreateTime.UnixMilli())})
-				}
+		// 大V Outbox：并行拉取
+		if len(bigVs) > 0 {
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			for _, bvID := range bigVs {
+				wg.Add(1)
+				go func(bvID uint) {
+					defer wg.Done()
+					ids, _ := s.rdb.ZRevRange(ctx, infraredis.Outbox(bvID), 0, 199).Result()
+					if len(ids) == 0 {
+						return
+					}
+					videoIDs := make([]uint, 0, len(ids))
+					for _, idStr := range ids {
+						id, _ := strconv.ParseUint(idStr, 10, 64)
+						videoIDs = append(videoIDs, uint(id))
+					}
+					videos, _ := s.cache.GetVideoByIDs(ctx, videoIDs)
+					mu.Lock()
+					for _, v := range videos {
+						if v != nil {
+							all = append(all, videoScore{v, float64(v.CreateTime.UnixMilli())})
+						}
+					}
+					mu.Unlock()
+				}(bvID)
 			}
+			wg.Wait()
 		}
 	}
 
-	// ── Cold path: check / build follow cache ──
+	// ── 冷路径：查 follow cache，未命中则触发重建 ────────────────────────
 	cacheKey := infraredis.FeedCache(userID, cursor, limit)
 	cached, _ := s.rdb.ZRange(ctx, cacheKey, 0, -1).Result()
 	if len(cached) == 0 && len(normals) > 0 {
-		// Cache miss — rebuild via singleflight-protected cold pull
-		cacheKeyForBuild := infraredis.FeedCache(userID, cursor, limit)
 		s.cache.RebuildFollowCache(ctx, userID, before, limit, normals,
-			func(ctx context.Context, authorID uint, before time.Time, limit int) ([]string, error) {
+			func(ctx context.Context, authorID uint, before time.Time, limit int) ([]goredis.Z, error) {
 				key := infraredis.Outbox(authorID)
-				var ids []string
 				var err error
+				var zs []goredis.Z
 				if before.IsZero() {
-					ids, err = s.rdb.ZRange(ctx, key, 0, int64(limit-1)).Result()
+					zs, err = s.rdb.ZRangeWithScores(ctx, key, 0, int64(limit-1)).Result()
 				} else {
-					ids, err = s.rdb.ZRevRangeByScore(ctx, key, &goredis.ZRangeBy{
+					zs, err = s.rdb.ZRevRangeByScoreWithScores(ctx, key, &goredis.ZRangeBy{
 						Min:   "-inf",
 						Max:   fmt.Sprintf("%d", before.UnixMilli()),
 						Count: int64(limit),
 					}).Result()
 				}
-				if err != nil || len(ids) == 0 {
-					// Fallback: pull from DB
+				if err != nil || len(zs) == 0 {
 					dbVideos, dbErr := s.repo.GetVideosByAuthor(ctx, authorID, before, limit)
 					if dbErr != nil || len(dbVideos) == 0 {
 						return nil, dbErr
 					}
-					ids = make([]string, len(dbVideos))
+					zs = make([]goredis.Z, len(dbVideos))
 					for i, v := range dbVideos {
-						ids[i] = fmt.Sprintf("%d", v.ID)
+						zs[i] = goredis.Z{Score: float64(v.CreateTime.UnixMilli()), Member: fmt.Sprintf("%d", v.ID)}
 					}
 				}
-				return ids, err
+				return zs, err
 			},
 		)
-		// Re-read after rebuild
-		cached, _ = s.rdb.ZRange(ctx, cacheKeyForBuild, 0, -1).Result()
+		cached, _ = s.rdb.ZRange(ctx, cacheKey, 0, -1).Result()
 	}
 
-	// Merge cold cache entries
+	// 合并冷缓存数据
 	for _, idStr := range cached {
 		id, _ := strconv.ParseUint(idStr, 10, 64)
 		videos, _ := s.cache.GetVideoByIDs(ctx, []uint{uint(id)})
@@ -220,7 +261,7 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 		}
 	}
 
-	// ── Sort and dedup ──
+	// ── 排序去重 ─────────────────────────────────────────────────────────
 	for i := 0; i < len(all)-1; i++ {
 		for j := i + 1; j < len(all); j++ {
 			if all[j].score > all[i].score {
@@ -252,6 +293,14 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 	}
 
 	return videos, nextCursor, len(videos) == limit, nil
+}
+
+func normalsMapToSlice(m map[uint]bool) []uint {
+	res := make([]uint, 0, len(m))
+	for k := range m {
+		res = append(res, k)
+	}
+	return res
 }
 
 func (s *FeedService) ListByTag(ctx context.Context, tag string, cursor string, limit int) ([]*models.Video, *string, bool, error) {

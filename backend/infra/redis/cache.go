@@ -22,6 +22,10 @@ const (
 	L2TTL = time.Hour
 	// 软标记 TTL，防止击穿标记的过期时间
 	sfLabelTTL = 30 * time.Second
+	// 轮询重试间隔（每次等待时长）
+	sfPollInterval = 100 * time.Millisecond
+	// 轮询最多等待时间
+	sfPollTimeout = 2 * time.Second
 	// 视频详情缓存 TTL，设计文档要求 5min
 	detailTTL = 5 * time.Minute
 	// 详情分布式锁 TTL
@@ -51,15 +55,26 @@ func (c *Cache) SetLock(lock *Lock) {
 	c.lock = lock
 }
 
+// SetRepo 设置 repository 引用（用于 DB 降级回填）
+func (c *Cache) SetRepo(repo *repository.Repository) {
+	c.repo = repo
+}
+
+// ---------------------------------------------------------------
+// 视频实体缓存（统一 L1 key 格式为 VideoEntity(id)）
+// ---------------------------------------------------------------
+
 func (c *Cache) GetVideoEntity(ctx context.Context, id uint) (*models.Video, error) {
 	key := VideoEntity(id)
 
+	// L1
 	if v, ok := c.local.Get(key); ok {
 		if video, ok := v.(*models.Video); ok {
 			return video, nil
 		}
 	}
 
+	// L2
 	v, err := c.rdb.Get(ctx, key).Result()
 	if err == nil {
 		var video models.Video
@@ -67,6 +82,19 @@ func (c *Cache) GetVideoEntity(ctx context.Context, id uint) (*models.Video, err
 			c.local.Set(key, &video, L1TTL)
 			return &video, nil
 		}
+	}
+
+	// L2 miss，降级到 DB（健壮性补充）
+	if c.repo != nil {
+		dbVideo, dbErr := c.repo.GetVideoByID(ctx, id)
+		if dbErr == nil && dbVideo != nil {
+			// 回写缓存
+			data, _ := json.Marshal(dbVideo)
+			c.rdb.Set(ctx, key, data, L2TTL)
+			c.local.Set(key, dbVideo, L1TTL)
+			return dbVideo, nil
+		}
+		return nil, dbErr
 	}
 
 	return nil, err
@@ -77,143 +105,119 @@ func (c *Cache) GetVideoByIDs(ctx context.Context, ids []uint) ([]*models.Video,
 		return []*models.Video{}, nil
 	}
 
-	key := VideoEntity(0)
 	results := make([]*models.Video, len(ids))
-	var missed []int
+	var missedIdx []int
 
-	// L1 查询
+	// L1 批量查询，统一使用 VideoEntity(id) 作为键
 	for i, id := range ids {
-		if v, ok := c.local.Get(fmt.Sprintf("%s:%d", key, id)); ok {
+		if v, ok := c.local.Get(VideoEntity(id)); ok {
 			if video, ok := v.(*models.Video); ok {
 				results[i] = video
 				continue
 			}
 		}
-		missed = append(missed, i)
+		missedIdx = append(missedIdx, i)
 	}
 
-	if len(missed) == 0 {
+	if len(missedIdx) == 0 {
 		return results, nil
 	}
 
-	missedIDs := make([]uint, len(missed))
-	for i, idx := range missed {
+	missedIDs := make([]uint, len(missedIdx))
+	for i, idx := range missedIdx {
 		missedIDs[i] = ids[idx]
 	}
 
-	// L2 MGet，带 singleflight 防击穿
+	// 软标记检查：如果已有其他实例正在重建，轮询等待
+	sfLabelKey := SFLabel(fmt.Sprintf("entity:%v", missedIDs))
+	if c.isRebuilding(ctx, sfLabelKey) {
+		c.waitForRebuild(ctx, sfLabelKey)
+		// 轮询结束后重新尝 L2 缓存
+		vals2, err2 := c.rdb.MGet(ctx, makeRedisKeys(missedIDs, VideoEntity)...).Result()
+		if err2 == nil {
+			for i, v := range vals2 {
+				if v == nil {
+					continue
+				}
+				var video models.Video
+				if json.Unmarshal([]byte(v.(string)), &video) == nil {
+					c.local.Set(VideoEntity(missedIDs[i]), &video, L1TTL)
+					results[missedIdx[i]] = &video
+				}
+			}
+		}
+		// 对仍未命中的 ID 继续查 DB
+		stillMissedIdx := make([]int, 0)
+		stillMissedIDs := make([]uint, 0)
+		for i, idx := range missedIdx {
+			if results[idx] == nil {
+				stillMissedIdx = append(stillMissedIdx, idx)
+				stillMissedIDs = append(stillMissedIDs, missedIDs[i])
+			}
+		}
+		if len(stillMissedIDs) > 0 {
+			return c.loadFromDB(ctx, stillMissedIDs, results, stillMissedIdx)
+		}
+		return results, nil
+	}
+
+	// singleflight：进程内去重
 	sfKey := fmt.Sprintf("videos:%v", missedIDs)
 	ret, _, _ := c.sf.Do(sfKey, func() (interface{}, error) {
-		// 写入 Redis 软标记，防止击穿
-		sfLabelKey := SFLabel(fmt.Sprintf("entity:%v", missedIDs))
+		// 原子性设置软标记
 		c.rdb.SetNX(ctx, sfLabelKey, "1", sfLabelTTL)
 		// L2 MGet
 		vals, err := c.rdb.MGet(ctx, makeRedisKeys(missedIDs, VideoEntity)...).Result()
 		if err != nil {
 			return nil, err
 		}
-		// L2 命中的直接写 L1 本地缓存
-		key := VideoEntity(0)
+		// 回写 L1（统一 key）
 		for i, v := range vals {
 			if v == nil {
 				continue
 			}
 			var video models.Video
 			if json.Unmarshal([]byte(v.(string)), &video) == nil {
-				c.local.Set(fmt.Sprintf("%s:%d", key, missedIDs[i]), &video, L1TTL)
+				c.local.Set(VideoEntity(missedIDs[i]), &video, L1TTL)
+				// 标记 results 为命中
+				results[missedIdx[i]] = &video
 			}
 		}
 		return vals, nil
 	})
-	// 单飞结束后清理软标记
-	defer func() {
-		sfLabelKey := SFLabel(fmt.Sprintf("entity:%v", missedIDs))
-		c.rdb.Del(context.Background(), sfLabelKey)
-	}()
 
-	vals, ok := ret.([]interface{})
-	if !ok {
-		return c.loadFromDB(ctx, missedIDs, results, missed)
-	}
-	for i, v := range vals {
-		if v != nil {
-			var video models.Video
-			if json.Unmarshal([]byte(v.(string)), &video) == nil {
-				results[missed[i]] = &video
+	// 清理软标记
+	defer c.rdb.Del(context.Background(), sfLabelKey)
+
+	if _, ok := ret.([]interface{}); ok {
+		// 对 L2 未命中的 ID 继续查 DB
+		stillMissedIdx := make([]int, 0)
+		stillMissedIDs := make([]uint, 0)
+		for i, idx := range missedIdx {
+			if results[idx] == nil {
+				stillMissedIdx = append(stillMissedIdx, idx)
+				stillMissedIDs = append(stillMissedIDs, missedIDs[i])
 			}
 		}
-	}
-
-	// 处理 L2 未命中：从 DB 回填
-	return c.loadFromDB(ctx, missedIDs, results, missed)
-}
-
-// loadFromDB 从 MySQL 回填未命中缓存
-func (c *Cache) loadFromDB(ctx context.Context, missedIDs []uint, results []*models.Video, missed []int) ([]*models.Video, error) {
-	// 找出仍然为 nil 的位置
-	var stillMissedIdx []int
-	var stillMissedIDs []uint
-	for i, idx := range missed {
-		if results[idx] == nil {
-			stillMissedIdx = append(stillMissedIdx, idx)
-			stillMissedIDs = append(stillMissedIDs, missedIDs[i])
+		if len(stillMissedIDs) > 0 {
+			return c.loadFromDB(ctx, stillMissedIDs, results, stillMissedIdx)
 		}
-	}
-
-	if len(stillMissedIDs) == 0 {
 		return results, nil
 	}
 
-	// 聚合查询 DB（通过 Repository）
-	dbVideos, err := c.repo.GetVideosByIDs(ctx, stillMissedIDs)
-	if err != nil {
-		return results, err
-	}
-
-	// 建立 id -> video 映射
-	videoMap := make(map[uint]*models.Video)
-	for _, v := range dbVideos {
-		videoMap[v.ID] = v
-	}
-
-	key := VideoEntity(0)
-	for i, idx := range stillMissedIdx {
-		id := stillMissedIDs[i]
-		if video, ok := videoMap[id]; ok {
-			results[idx] = video
-			// 回写 L2 Redis
-			data, _ := json.Marshal(video)
-			c.rdb.Set(ctx, VideoEntity(id), data, L2TTL)
-			c.local.Set(fmt.Sprintf("%s:%d", key, id), video, L1TTL)
-		}
-	}
-
-	// 清理软标记
-	sfLabelKey := SFLabel(fmt.Sprintf("entity:%v", stillMissedIDs))
-	c.rdb.Del(ctx, sfLabelKey)
-
-	return results, nil
-}
-
-// SetRepo 设置 repository 引用（用于 DB 降级回填）
-func (c *Cache) SetRepo(repo *repository.Repository) {
-	c.repo = repo
-}
-
-func makeRedisKeys(ids []uint, fn func(uint) string) []string {
-	keys := make([]string, len(ids))
-	for i, id := range ids {
-		keys[i] = fn(id)
-	}
-	return keys
+	// singleflight 错误，降级 DB
+	return c.loadFromDB(ctx, missedIDs, results, missedIdx)
 }
 
 func (c *Cache) SetVideoEntity(ctx context.Context, video *models.Video) error {
+	if video == nil {
+		return fmt.Errorf("video is nil")
+	}
+	key := VideoEntity(video.ID)
 	data, err := json.Marshal(video)
 	if err != nil {
 		return err
 	}
-	key := VideoEntity(video.ID)
 	c.local.Set(key, video, L1TTL)
 	return c.rdb.Set(ctx, key, data, L2TTL).Err()
 }
@@ -221,21 +225,24 @@ func (c *Cache) SetVideoEntity(ctx context.Context, video *models.Video) error {
 func (c *Cache) InvalidateVideo(id uint) {
 	key := VideoEntity(id)
 	c.local.Delete(key)
+	c.rdb.Del(context.Background(), key) // 同时删除 L2
 }
 
-// GetVideoDetail returns cached video detail. On cache miss, acquires a distributed
-// lock and double-checks before falling back to the provided DB query function.
+// ---------------------------------------------------------------
+// 视频详情缓存
+// ---------------------------------------------------------------
+
 func (c *Cache) GetVideoDetail(ctx context.Context, id uint, dbQuery func(context.Context, uint) (*models.Video, error)) (*models.Video, error) {
 	key := VideoDetail(id)
 
-	// L1 本地缓存
+	// L1
 	if v, ok := c.local.Get(key); ok {
 		if video, ok := v.(*models.Video); ok {
 			return video, nil
 		}
 	}
 
-	// L2 Redis
+	// L2
 	v, err := c.rdb.Get(ctx, key).Result()
 	if err == nil {
 		var video models.Video
@@ -245,58 +252,54 @@ func (c *Cache) GetVideoDetail(ctx context.Context, id uint, dbQuery func(contex
 		}
 	}
 
-	// Cache miss — try to acquire lock to rebuild
-	if c.lock == nil {
-		return dbQuery(ctx, id)
-	}
-
-	token := fmt.Sprintf("%d", time.Now().UnixNano())
-	acquired, err := c.lock.AcquireDetail(ctx, id, token, detailLockTTL)
-	if err != nil {
-		return dbQuery(ctx, id)
-	}
-
-	if !acquired {
-		// Another goroutine is rebuilding; wait and re-check cache
-		for i := 0; i < 10; i++ {
-			time.Sleep(100 * time.Millisecond)
-			v2, err2 := c.rdb.Get(ctx, key).Result()
-			if err2 == nil {
-				var video models.Video
-				if json.Unmarshal([]byte(v2), &video) == nil {
-					return &video, nil
+	// 回源前分布式锁
+	if c.lock != nil {
+		token := fmt.Sprintf("%d", time.Now().UnixNano())
+		acquired, lockErr := c.lock.AcquireDetail(ctx, id, token, detailLockTTL)
+		if lockErr != nil {
+			return dbQuery(ctx, id) // 锁服务异常直接查库
+		}
+		if !acquired {
+			// 等待其他协程重建
+			for i := 0; i < 10; i++ {
+				time.Sleep(100 * time.Millisecond)
+				v2, err2 := c.rdb.Get(ctx, key).Result()
+				if err2 == nil {
+					var video models.Video
+					if json.Unmarshal([]byte(v2), &video) == nil {
+						return &video, nil
+					}
 				}
 			}
+			// 等待超时直接查库
+			return dbQuery(ctx, id)
 		}
-		return dbQuery(ctx, id)
-	}
-
-	// We hold the lock — double-check before querying DB
-	v, err = c.rdb.Get(ctx, key).Result()
-	if err == nil {
-		var video models.Video
-		if json.Unmarshal([]byte(v), &video) == nil {
+		// 拿到锁，double-check
+		v, err = c.rdb.Get(ctx, key).Result()
+		if err == nil {
+			var video models.Video
+			if json.Unmarshal([]byte(v), &video) == nil {
+				c.lock.ReleaseDetail(ctx, id, token)
+				return &video, nil
+			}
+		}
+		video, dbErr := dbQuery(ctx, id)
+		if dbErr != nil || video == nil {
 			c.lock.ReleaseDetail(ctx, id, token)
-			return &video, nil
+			return video, dbErr
 		}
-	}
-
-	// Load from DB
-	video, err := dbQuery(ctx, id)
-	if err != nil || video == nil {
+		// 写回
+		data, _ := json.Marshal(video)
+		c.rdb.Set(ctx, key, data, detailTTL)
+		c.local.Set(key, video, L1TTL)
 		c.lock.ReleaseDetail(ctx, id, token)
-		return video, err
+		return video, nil
 	}
 
-	// Write back to cache
-	data, _ := json.Marshal(video)
-	c.rdb.Set(ctx, key, data, detailTTL)
-	c.local.Set(key, video, L1TTL)
-	c.lock.ReleaseDetail(ctx, id, token)
-	return video, nil
+	// 无锁直接查库
+	return dbQuery(ctx, id)
 }
 
-// SetVideoDetail writes a video detail entry into the L2 cache (and L1 local cache).
 func (c *Cache) SetVideoDetail(ctx context.Context, video *models.Video) error {
 	key := VideoDetail(video.ID)
 	data, err := json.Marshal(video)
@@ -307,29 +310,28 @@ func (c *Cache) SetVideoDetail(ctx context.Context, video *models.Video) error {
 	return c.rdb.Set(ctx, key, data, detailTTL).Err()
 }
 
-// InvalidateVideoDetail removes a video detail entry from cache.
 func (c *Cache) InvalidateVideoDetail(id uint) {
 	key := VideoDetail(id)
 	c.local.Delete(key)
+	c.rdb.Del(context.Background(), key) // 同时删除 L2
 }
 
+// ---------------------------------------------------------------
+// 冷拉取缓存重建
+// ---------------------------------------------------------------
+
 // RebuildFollowCache builds the cold follow cache for a user when they page past
-// their Inbox boundary. It pulls from all normal bloggers' Outbox (or DB fallback)
-// and writes the merged results to v1:feed:followcache:{uid}:before:{ts}:limit:{n}
-// with a singleflight soft-label for stampede protection.
-//
-// Parameters:
-//   - normalAuthors: list of non-big-V author IDs to pull Outbox from
-//   - fetchOutbox: returns videoIDs from an author's Outbox older than `before` (Redis first, DB fallback)
-func (c *Cache) RebuildFollowCache(ctx context.Context, uid uint, before time.Time, limit int, normalAuthors []uint, fetchOutbox func(ctx context.Context, authorID uint, before time.Time, limit int) ([]string, error)) error {
-	// Stampede protection via soft-label
+// their Inbox boundary. fetchOutbox must return videoIDs and their publish timestamps
+// (as unix seconds) for correct sorting.
+func (c *Cache) RebuildFollowCache(ctx context.Context, uid uint, before time.Time, limit int, normalAuthors []uint, fetchOutbox func(ctx context.Context, authorID uint, before time.Time, limit int) ([]redis.Z, error)) error {
+	// 软标记防多实例并发重建
 	labelKey := SFLabel(fmt.Sprintf("fallback:followcache:%d", uid))
 	set, err := c.rdb.SetNX(ctx, labelKey, "1", sfLabelTTL).Result()
 	if err != nil {
 		return err
 	}
 	if !set {
-		// Already being rebuilt by another goroutine
+		// 已有其他实例在重建
 		return nil
 	}
 	defer c.rdb.Del(ctx, labelKey)
@@ -338,41 +340,115 @@ func (c *Cache) RebuildFollowCache(ctx context.Context, uid uint, before time.Ti
 
 	var allScores []redis.Z
 	for _, authorID := range normalAuthors {
-		ids, err := fetchOutbox(ctx, authorID, before, limit)
-		if err != nil || len(ids) == 0 {
+		scores, err := fetchOutbox(ctx, authorID, before, limit)
+		if err != nil || len(scores) == 0 {
 			continue
 		}
-		for _, idStr := range ids {
-			allScores = append(allScores, redis.Z{Score: float64(time.Now().UnixNano()), Member: idStr})
-		}
+		allScores = append(allScores, scores...)
 	}
 
 	if len(allScores) == 0 {
 		return nil
 	}
 
-	// Sort descending by score and dedup by member (videoID)
+	// 按 Score（即发布时间戳）降序排序
 	sort.Slice(allScores, func(i, j int) bool {
 		return allScores[i].Score > allScores[j].Score
 	})
+
+	// 去重（按 member 即 videoID）
 	seen := make(map[string]bool)
 	deduped := make([]redis.Z, 0, len(allScores))
 	for _, z := range allScores {
-		memberStr, _ := z.Member.(string)
+		memberStr, ok := z.Member.(string)
+		if !ok {
+			continue
+		}
 		if !seen[memberStr] {
 			seen[memberStr] = true
 			deduped = append(deduped, z)
 		}
 	}
+
 	if len(deduped) > limit {
 		deduped = deduped[:limit]
 	}
 
-	// Write merged results to ZSET
+	// 写入 ZSET，先清空再批量插入
 	c.rdb.Del(ctx, cacheKey)
 	if len(deduped) > 0 {
 		c.rdb.ZAdd(ctx, cacheKey, deduped...)
 	}
 	c.rdb.Expire(ctx, cacheKey, followCacheTTL)
 	return nil
+}
+
+// ---------------------------------------------------------------
+// 内部辅助函数
+// ---------------------------------------------------------------
+
+// isRebuilding 检查 Redis 中是否存在指定的重建标记
+func (c *Cache) isRebuilding(ctx context.Context, labelKey string) bool {
+	exists, _ := c.rdb.Exists(ctx, labelKey).Result()
+	return exists > 0
+}
+
+// waitForRebuild 轮询等待重建软标记消失，最长等待 sfPollTimeout。
+// 设计文档要求：软标记 SETNX 短 TTL，完成即删除；其他请求轮询等待。
+func (c *Cache) waitForRebuild(ctx context.Context, labelKey string) bool {
+	deadline := time.Now().Add(sfPollTimeout)
+	for time.Now().Before(deadline) {
+		exists, err := c.rdb.Exists(ctx, labelKey).Result()
+		if err != nil || exists == 0 {
+			return true // 重建完成或出错
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(sfPollInterval):
+		}
+	}
+	return false // 超时
+}
+
+// loadFromDB 从 MySQL 加载实体，并回写 L2 和 L1（统一 key）
+func (c *Cache) loadFromDB(ctx context.Context, ids []uint, results []*models.Video, indices []int) ([]*models.Video, error) {
+	if c.repo == nil {
+		return results, fmt.Errorf("repository not set")
+	}
+
+	dbVideos, err := c.repo.GetVideosByIDs(ctx, ids)
+	if err != nil {
+		return results, err
+	}
+
+	videoMap := make(map[uint]*models.Video)
+	for _, v := range dbVideos {
+		videoMap[v.ID] = v
+	}
+
+	for i, idx := range indices {
+		id := ids[i]
+		if video, ok := videoMap[id]; ok {
+			results[idx] = video
+			// 回写 L2
+			data, _ := json.Marshal(video)
+			c.rdb.Set(ctx, VideoEntity(id), data, L2TTL)
+			// 回写 L1（统一 key）
+			c.local.Set(VideoEntity(id), video, L1TTL)
+		}
+	}
+
+	// 清理可能残留的软标记
+	sfLabelKey := SFLabel(fmt.Sprintf("entity:%v", ids))
+	c.rdb.Del(ctx, sfLabelKey)
+	return results, nil
+}
+
+func makeRedisKeys(ids []uint, fn func(uint) string) []string {
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = fn(id)
+	}
+	return keys
 }

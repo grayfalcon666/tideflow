@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -51,9 +52,10 @@ func (m *RateLimitMiddleware) RegisterLimit() gin.HandlerFunc {
 	}
 }
 
-func (m *RateLimitMiddleware) LikeLimit(userID uint) gin.HandlerFunc {
+func (m *RateLimitMiddleware) LikeLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		allowed, _, err := m.limiter.Allow(c.Request.Context(), "like_write", string(rune(userID)), 30, time.Minute)
+		userID := GetUserID(c)
+		allowed, _, err := m.limiter.Allow(c.Request.Context(), "like_write", fmt.Sprintf("%d", userID), 30, time.Minute)
 		if err != nil {
 			c.Next()
 			return
@@ -67,9 +69,10 @@ func (m *RateLimitMiddleware) LikeLimit(userID uint) gin.HandlerFunc {
 	}
 }
 
-func (m *RateLimitMiddleware) CommentLimit(userID uint) gin.HandlerFunc {
+func (m *RateLimitMiddleware) CommentLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		allowed, _, err := m.limiter.Allow(c.Request.Context(), "comment_write", string(rune(userID)), 10, time.Minute)
+		userID := GetUserID(c)
+		allowed, _, err := m.limiter.Allow(c.Request.Context(), "comment_write", fmt.Sprintf("%d", userID), 10, time.Minute)
 		if err != nil {
 			c.Next()
 			return
@@ -83,9 +86,10 @@ func (m *RateLimitMiddleware) CommentLimit(userID uint) gin.HandlerFunc {
 	}
 }
 
-func (m *RateLimitMiddleware) SocialLimit(userID uint) gin.HandlerFunc {
+func (m *RateLimitMiddleware) SocialLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		allowed, _, err := m.limiter.Allow(c.Request.Context(), "social_write", string(rune(userID)), 20, time.Minute)
+		userID := GetUserID(c)
+		allowed, _, err := m.limiter.Allow(c.Request.Context(), "social_write", fmt.Sprintf("%d", userID), 20, time.Minute)
 		if err != nil {
 			c.Next()
 			return

@@ -162,8 +162,9 @@ func (w *LikeWorker) handleLike(ctx context.Context, d amqp.Delivery) {
 		"likes_count": w.repo.DB().Raw("SELECT likes_count + 1 FROM videos WHERE id = ?", e.VideoID),
 	})
 
-	// Cache Aside：删除视频实体缓存，下次读时重建
+	// Cache Aside：删除视频实体缓存和详情缓存，下次读时重建
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
 
 	d.Ack(false)
 }
@@ -181,8 +182,9 @@ func (w *LikeWorker) handleUnlike(ctx context.Context, d amqp.Delivery) {
 		"likes_count": w.repo.DB().Raw("SELECT likes_count - 1 FROM videos WHERE id = ?", e.VideoID),
 	})
 
-	// Cache Aside：删除视频实体缓存
+	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
 
 	d.Ack(false)
 }
@@ -245,8 +247,9 @@ func (w *CommentWorker) handleCommentPublish(ctx context.Context, d amqp.Deliver
 		"popularity": w.repo.DB().Raw("SELECT popularity + 5 FROM videos WHERE id = ?", e.VideoID),
 	})
 
-	// Cache Aside：删除视频实体缓存
+	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
 
 	d.Ack(false)
 }
@@ -264,8 +267,9 @@ func (w *CommentWorker) handleCommentDelete(ctx context.Context, d amqp.Delivery
 		"popularity": w.repo.DB().Raw("SELECT popularity - 5 FROM videos WHERE id = ?", e.VideoID),
 	})
 
-	// Cache Aside：删除视频实体缓存
+	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
 
 	d.Ack(false)
 }
@@ -405,8 +409,9 @@ func (w *PopularityWorker) handlePopularityUpdate(ctx context.Context, d amqp.De
 	w.rdb.ZIncrBy(ctx, key, float64(e.Change), fmt.Sprintf("%d", e.VideoID))
 	w.rdb.Expire(ctx, key, 2*time.Hour)
 
-	// Cache Aside：删除视频实体缓存
+	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
 }
 
 type OutboxWorker struct {

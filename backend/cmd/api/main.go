@@ -148,8 +148,8 @@ func setupRouter(
 	r.PUT("/api/v1/users/me/username", authMw.JWTAuth(), userHandler.UpdateUsername)
 	r.GET("/api/v1/users/:id/videos", authMw.SoftJWTAuth(), userHandler.GetUserVideos)
 
-	r.POST("/api/v1/users/:user_id/follow", authMw.JWTAuth(), userHandler.Follow)
-	r.DELETE("/api/v1/users/:user_id/follow", authMw.JWTAuth(), userHandler.Unfollow)
+	r.POST("/api/v1/users/:user_id/follow", authMw.JWTAuth(), rateLimitMw.SocialLimit(), userHandler.Follow)
+	r.DELETE("/api/v1/users/:user_id/follow", authMw.JWTAuth(), rateLimitMw.SocialLimit(), userHandler.Unfollow)
 	r.GET("/api/v1/users/:id/following", authMw.JWTAuth(), userHandler.GetFollowing)
 	r.GET("/api/v1/users/:id/followers", authMw.JWTAuth(), userHandler.GetFollowers)
 	r.GET("/api/v1/users/:id/social-counts", authMw.JWTAuth(), userHandler.GetSocialCounts)
@@ -166,12 +166,12 @@ func setupRouter(
 	r.GET("/api/v1/feed/following", authMw.JWTAuth(), feedHandler.ListByFollowing)
 	r.GET("/api/v1/feed/tag", authMw.SoftJWTAuth(), feedHandler.ListByTag)
 
-	r.POST("/api/v1/videos/:id/like", authMw.JWTAuth(), interactionHandler.LikeVideo)
-	r.DELETE("/api/v1/videos/:id/like", authMw.JWTAuth(), interactionHandler.UnlikeVideo)
+	r.POST("/api/v1/videos/:id/like", authMw.JWTAuth(), rateLimitMw.LikeLimit(), interactionHandler.LikeVideo)
+	r.DELETE("/api/v1/videos/:id/like", authMw.JWTAuth(), rateLimitMw.LikeLimit(), interactionHandler.UnlikeVideo)
 	r.GET("/api/v1/videos/:id/like", authMw.JWTAuth(), interactionHandler.IsLiked)
 	r.GET("/api/v1/likes/mine", authMw.JWTAuth(), interactionHandler.GetLikedVideos)
-	r.POST("/api/v1/videos/:id/comments", authMw.JWTAuth(), interactionHandler.PublishComment)
-	r.DELETE("/api/v1/videos/:id/comments/:comment_id", authMw.JWTAuth(), interactionHandler.DeleteComment)
+	r.POST("/api/v1/videos/:id/comments", authMw.JWTAuth(), rateLimitMw.CommentLimit(), interactionHandler.PublishComment)
+	r.DELETE("/api/v1/videos/:id/comments/:comment_id", authMw.JWTAuth(), rateLimitMw.CommentLimit(), interactionHandler.DeleteComment)
 	r.GET("/api/v1/videos/:id/comments", authMw.SoftJWTAuth(), interactionHandler.GetComments)
 
 	r.POST("/api/v1/messages", authMw.JWTAuth(), msgHandler.SendMessage)

@@ -25,13 +25,13 @@ func (Account) TableName() string {
 
 type Video struct {
 	ID           uint           `gorm:"primaryKey" json:"id"`
-	AuthorID     uint           `gorm:"index;not null" json:"author_id"`
+	AuthorID     uint           `gorm:"index:idx_videos_author_create,priority:1;not null" json:"author_id"`
 	Username     string         `gorm:"size:255;not null" json:"username"`
 	Title        string         `gorm:"size:255;not null" json:"title"`
 	Description  string         `gorm:"size:255" json:"description"`
 	PlayURL      string         `gorm:"size:255;not null" json:"play_url"`
 	CoverURL     string         `gorm:"size:255;not null" json:"cover_url"`
-	CreateTime   time.Time      `gorm:"index" json:"create_time"`
+	CreateTime   time.Time      `gorm:"index:idx_videos_author_create,priority:2" json:"create_time"`
 	UpdateTime   time.Time      `json:"update_time"`
 	LikesCount   int64          `gorm:"not null;default:0" json:"likes_count"`
 	Popularity   int64          `gorm:"not null;default:0" json:"popularity"`

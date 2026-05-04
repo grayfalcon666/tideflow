@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strings"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -32,7 +33,7 @@ func main() {
 }
 
 func migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&models.Account{},
 		&models.Video{},
 		&models.Like{},
@@ -43,5 +44,27 @@ func migrate(db *gorm.DB) error {
 		&models.VideoTag{},
 		&models.OutboxMsg{},
 		&models.Notification{},
-	)
+	); err != nil {
+		return err
+	}
+
+	// 复合索引：加速 Timeline 回源和热门排序查询
+	indexes := []string{
+		"CREATE INDEX idx_videos_author_create ON videos (author_id, create_time)",
+		"CREATE INDEX idx_videos_likes_count_id ON videos (likes_count, id)",
+		"CREATE INDEX idx_videos_popularity_time_id ON videos (popularity, create_time)",
+	}
+	for _, idx := range indexes {
+		if err := db.Exec(idx).Error; err != nil {
+			// 忽略 "duplicate index name" 错误
+			if !isDuplicateIndexErr(err) {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func isDuplicateIndexErr(err error) bool {
+	return err != nil && (strings.Contains(err.Error(), "Duplicate key name") || strings.Contains(err.Error(), "index already exists"))
 }
