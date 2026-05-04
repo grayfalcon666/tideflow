@@ -54,10 +54,10 @@ func main() {
 
 	repo := repository.New(db)
 	authSvc := service.NewAuthService(repo, cfg.JWT.Secret, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
-	userSvc := service.NewUserService(repo, cfg.BigVThreshold)
+	userSvc := service.NewUserService(repo, cfg.BigVThreshold, mqInstance)
 	videoSvc := service.NewVideoService(repo, cache, cfg.BigVThreshold, cfg.Upload.Dir)
 	feedSvc := service.NewFeedService(repo, cache, rdb, cfg.BigVThreshold)
-	interactionSvc := service.NewInteractionService(repo)
+	interactionSvc := service.NewInteractionService(repo, mqInstance)
 	msgSvc := service.NewMessageService(repo)
 	notifSvc := service.NewNotificationService(repo)
 

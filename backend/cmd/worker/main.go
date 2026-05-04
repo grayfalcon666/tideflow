@@ -58,12 +58,12 @@ func main() {
 	}()
 
 	go func() {
-		cw := mq.NewCommentWorker(mqInstance, rdb)
+		cw := mq.NewCommentWorker(mqInstance, rdb, repo)
 		cw.Start(ctx)
 	}()
 
 	go func() {
-		sw := mq.NewSocialWorker(mqInstance, rdb, cfg.BigVThreshold)
+		sw := mq.NewSocialWorker(mqInstance, rdb, repo, cfg.BigVThreshold)
 		sw.Start(ctx)
 	}()
 
