@@ -115,6 +115,7 @@ func (VideoTag) TableName() string {
 type OutboxMsg struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	VideoID   uint      `gorm:"index" json:"video_id"`
+	AuthorID  uint      `gorm:"index" json:"author_id"`
 	EventType string    `gorm:"size:50;not null" json:"event_type"`
 	CreateTime time.Time `gorm:"not null" json:"create_time"`
 	Status    string    `gorm:"size:50;index;default:pending" json:"status"`

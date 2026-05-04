@@ -61,6 +61,13 @@ func (h *FeedHandler) ListPopular(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "20")
 	window := c.DefaultQuery("window", "1h")
 
+	// window 参数白名单校验
+	validWindows := map[string]bool{"1m": true, "5m": true, "15m": true, "1h": true, "6h": true}
+	if !validWindows[window] {
+		response.BadRequest(c, "invalid window, must be one of: 1m, 5m, 15m, 1h, 6h")
+		return
+	}
+
 	offset := 0
 	if cursor != "" {
 		if parsed, err := strconv.Atoi(cursor); err == nil {

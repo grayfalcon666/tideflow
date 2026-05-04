@@ -33,7 +33,7 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
 		ToID    uint   `json:"to_id" binding:"required"`
-		Content string `json:"content" binding:"required"`
+		Content string `json:"content" binding:"required,max=500"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())

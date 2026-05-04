@@ -253,8 +253,8 @@ func (h *UserHandler) GetUserByUsername(c *gin.Context) {
 func (h *UserHandler) UpdateMe(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
-		AvatarURL *string `json:"avatar_url"`
-		Bio       *string `json:"bio"`
+		AvatarURL *string `json:"avatar_url" binding:"omitempty,min=1"`
+		Bio       *string `json:"bio" binding:"omitempty,max=255"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())

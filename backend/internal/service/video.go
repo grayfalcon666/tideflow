@@ -102,6 +102,7 @@ func (s *VideoService) PublishVideo(ctx context.Context, authorID uint, username
 
 	outbox := &models.OutboxMsg{
 		VideoID:    video.ID,
+		AuthorID:   authorID,
 		EventType:  "video_publish",
 		CreateTime: video.CreateTime,
 		Status:     "pending",
@@ -154,6 +155,10 @@ func (s *VideoService) UpdatePopularity(ctx context.Context, videoID uint, chang
 	return s.repo.UpdateVideo(ctx, videoID, map[string]interface{}{
 		"popularity": s.repo.DB().Raw("SELECT popularity + ? FROM videos WHERE id = ?", change, videoID),
 	})
+}
+
+func (s *VideoService) GetAccountByID(ctx context.Context, id uint) (*models.Account, error) {
+	return s.repo.GetAccountByID(ctx, id)
 }
 
 func generateFilename(orig string) string {

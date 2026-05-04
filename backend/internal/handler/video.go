@@ -35,6 +35,10 @@ func (h *VideoHandler) UploadVideo(c *gin.Context) {
 		response.BadRequest(c, "missing video file")
 		return
 	}
+	if file.Size > 500*1024*1024 {
+		response.BadRequest(c, "file too large, max 500MB")
+		return
+	}
 
 	url, err := h.video.UploadVideo(c.Request.Context(), file)
 	if err != nil {
@@ -85,14 +89,13 @@ func (h *VideoHandler) UploadCover(c *gin.Context) {
 // @Router /api/v1/videos [post]
 func (h *VideoHandler) PublishVideo(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	user, _ := c.Get("username")
 
 	var req struct {
-		Title       string   `json:"title" binding:"required"`
-		Description string   `json:"description"`
-		PlayURL     string   `json:"play_url" binding:"required"`
-		CoverURL    string   `json:"cover_url" binding:"required"`
-		Tags        []string `json:"tags"`
+		Title       string   `json:"title" binding:"required,min=1,max=255"`
+		Description string   `json:"description" binding:"max=500"`
+		PlayURL     string   `json:"play_url" binding:"required,min=1"`
+		CoverURL    string   `json:"cover_url" binding:"required,min=1"`
+		Tags        []string `json:"tags" binding:"max=10,dive,min=1,max=50"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
@@ -100,8 +103,9 @@ func (h *VideoHandler) PublishVideo(c *gin.Context) {
 	}
 
 	username := ""
-	if u, ok := user.(string); ok {
-		username = u
+	account, err := h.video.GetAccountByID(c.Request.Context(), userID)
+	if err == nil && account != nil {
+		username = account.Username
 	}
 
 	videoID, err := h.video.PublishVideo(c.Request.Context(), userID, username, req.Title, req.Description, req.PlayURL, req.CoverURL, req.Tags)
@@ -138,6 +142,18 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 
 	tags, _ := h.video.GetVideoTags(c.Request.Context(), uint(id))
 
+	// Get author info
+	author, _ := h.video.GetAccountByID(c.Request.Context(), video.AuthorID)
+	var authorData interface{}
+	if author != nil {
+		authorData = gin.H{
+			"id":             author.ID,
+			"username":       author.Username,
+			"avatar_url":     author.AvatarURL,
+			"follower_count": author.FollowerCount,
+		}
+	}
+
 	userID := middleware.GetUserID(c)
 	_ = userID
 	isLiked := false
@@ -145,7 +161,7 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"id":                  video.ID,
-		"author":              nil,
+		"author":              authorData,
 		"title":               video.Title,
 		"description":         video.Description,
 		"play_url":            video.PlayURL,
