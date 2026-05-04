@@ -2,20 +2,23 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
 	"tideflow/internal/models"
+	"tideflow/internal/mq"
 	"tideflow/internal/repository"
 )
 
 type UserService struct {
 	repo        *repository.Repository
 	bigVThresh  int
+	mq          *mq.MQ
 }
 
-func NewUserService(repo *repository.Repository, bigVThresh int) *UserService {
-	return &UserService{repo: repo, bigVThresh: bigVThresh}
+func NewUserService(repo *repository.Repository, bigVThresh int, mqInstance *mq.MQ) *UserService {
+	return &UserService{repo: repo, bigVThresh: bigVThresh, mq: mqInstance}
 }
 
 type UserProfile struct {
@@ -88,9 +91,16 @@ func (s *UserService) Follow(ctx context.Context, followerID, vloggerID uint) er
 		return err
 	}
 
-	s.repo.UpdateAccount(ctx, vloggerID, map[string]interface{}{
-		"follower_count": s.repo.DB().Raw("SELECT follower_count + 1 FROM accounts WHERE id = ?", vloggerID),
-	})
+	// 发布关注事件，SocialWorker 消费：更新粉丝计数 + 失效缓存
+	event := mq.SocialEvent{
+		EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
+		Action:     "follow",
+		FollowerID: followerID,
+		VloggerID:  vloggerID,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "social.events", "social.follow", event)
+
 	return nil
 }
 
@@ -99,9 +109,16 @@ func (s *UserService) Unfollow(ctx context.Context, followerID, vloggerID uint) 
 		return err
 	}
 
-	s.repo.UpdateAccount(ctx, vloggerID, map[string]interface{}{
-		"follower_count": s.repo.DB().Raw("SELECT follower_count - 1 FROM accounts WHERE id = ?", vloggerID),
-	})
+	// 发布取消关注事件，SocialWorker 消费：更新粉丝计数 + 失效缓存
+	event := mq.SocialEvent{
+		EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
+		Action:     "unfollow",
+		FollowerID: followerID,
+		VloggerID:  vloggerID,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "social.events", "social.unfollow", event)
+
 	return nil
 }
 

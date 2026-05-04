@@ -2,19 +2,22 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
 	"tideflow/internal/models"
+	"tideflow/internal/mq"
 	"tideflow/internal/repository"
 )
 
 type InteractionService struct {
 	repo *repository.Repository
+	mq   *mq.MQ
 }
 
-func NewInteractionService(repo *repository.Repository) *InteractionService {
-	return &InteractionService{repo: repo}
+func NewInteractionService(repo *repository.Repository, mqInstance *mq.MQ) *InteractionService {
+	return &InteractionService{repo: repo, mq: mqInstance}
 }
 
 func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint) error {
@@ -28,9 +31,15 @@ func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint
 		return err
 	}
 
-	s.repo.UpdateVideo(ctx, videoID, map[string]interface{}{
-		"likes_count": s.repo.DB().Raw("SELECT likes_count + 1 FROM videos WHERE id = ?", videoID),
-	})
+	// 发布点赞事件，LikeWorker 消费：更新热度分 + 失效缓存
+	event := mq.LikeEvent{
+		EventID:    fmt.Sprintf("%d-%d-%d", videoID, userID, time.Now().UnixNano()),
+		Action:     "like",
+		UserID:     userID,
+		VideoID:    videoID,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "like.events", "like.like", event)
 
 	return nil
 }
@@ -40,9 +49,15 @@ func (s *InteractionService) UnlikeVideo(ctx context.Context, userID, videoID ui
 		return err
 	}
 
-	s.repo.UpdateVideo(ctx, videoID, map[string]interface{}{
-		"likes_count": s.repo.DB().Raw("SELECT likes_count - 1 FROM videos WHERE id = ?", videoID),
-	})
+	// 发布取消点赞事件，LikeWorker 消费：更新热度分 + 失效缓存
+	event := mq.LikeEvent{
+		EventID:    fmt.Sprintf("%d-%d-%d", videoID, userID, time.Now().UnixNano()),
+		Action:     "unlike",
+		UserID:     userID,
+		VideoID:    videoID,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "like.events", "like.unlike", event)
 
 	return nil
 }
@@ -118,9 +133,18 @@ func (s *InteractionService) PublishComment(ctx context.Context, videoID, author
 		return 0, err
 	}
 
-	s.repo.UpdateVideo(ctx, videoID, map[string]interface{}{
-		"popularity": s.repo.DB().Raw("SELECT popularity + 5 FROM videos WHERE id = ?", videoID),
-	})
+	// 发布评论事件，CommentWorker 消费：更新热度分 + 失效缓存
+	event := mq.CommentEvent{
+		EventID:   fmt.Sprintf("%d-%d", comment.ID, time.Now().UnixNano()),
+		Action:    "publish",
+		CommentID: comment.ID,
+		Username:  username,
+		VideoID:   videoID,
+		AuthorID:  authorID,
+		Content:   content,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "comment.events", "comment.publish", event)
 
 	return comment.ID, nil
 }
@@ -133,6 +157,16 @@ func (s *InteractionService) DeleteComment(ctx context.Context, commentID, autho
 	if comment.AuthorID != authorID {
 		return err
 	}
+	// 发布评论删除事件，CommentWorker 消费：更新热度分 + 失效缓存
+	event := mq.CommentEvent{
+		EventID:   fmt.Sprintf("%d-%d", commentID, time.Now().UnixNano()),
+		Action:    "delete",
+		CommentID: commentID,
+		VideoID:   comment.VideoID,
+		AuthorID:  authorID,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "comment.events", "comment.delete", event)
 	return s.repo.SoftDeleteComment(ctx, commentID)
 }
 
