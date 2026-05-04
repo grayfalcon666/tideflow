@@ -31,7 +31,7 @@ func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint
 		return err
 	}
 
-	// 发布点赞事件，LikeWorker 消费：更新热度分 + 失效缓存
+	// 发布点赞事件，LikeWorker 消费：更新 likes_count
 	event := mq.LikeEvent{
 		EventID:    fmt.Sprintf("%d-%d-%d", videoID, userID, time.Now().UnixNano()),
 		Action:     "like",
@@ -41,6 +41,15 @@ func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint
 	}
 	s.mq.Publish(ctx, "like.events", "like.like", event)
 
+	// 发布热度增量事件，由 PopularityWorker 统一更新 Redis 热门窗口
+	popEvent := mq.PopularityEvent{
+		EventID:   fmt.Sprintf("%d-%d", videoID, time.Now().UnixNano()),
+		VideoID:   videoID,
+		Change:    1,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "video.popularity.events", "video.popularity.update", popEvent)
+
 	return nil
 }
 
@@ -49,7 +58,7 @@ func (s *InteractionService) UnlikeVideo(ctx context.Context, userID, videoID ui
 		return err
 	}
 
-	// 发布取消点赞事件，LikeWorker 消费：更新热度分 + 失效缓存
+	// 发布取消点赞事件，LikeWorker 消费：更新 likes_count
 	event := mq.LikeEvent{
 		EventID:    fmt.Sprintf("%d-%d-%d", videoID, userID, time.Now().UnixNano()),
 		Action:     "unlike",
@@ -58,6 +67,15 @@ func (s *InteractionService) UnlikeVideo(ctx context.Context, userID, videoID ui
 		OccurredAt: time.Now().UnixMilli(),
 	}
 	s.mq.Publish(ctx, "like.events", "like.unlike", event)
+
+	// 发布热度增量事件（负值），由 PopularityWorker 统一更新 Redis 热门窗口
+	popEvent := mq.PopularityEvent{
+		EventID:   fmt.Sprintf("%d-%d", videoID, time.Now().UnixNano()),
+		VideoID:   videoID,
+		Change:    -1,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "video.popularity.events", "video.popularity.update", popEvent)
 
 	return nil
 }
@@ -133,7 +151,7 @@ func (s *InteractionService) PublishComment(ctx context.Context, videoID, author
 		return 0, err
 	}
 
-	// 发布评论事件，CommentWorker 消费：更新热度分 + 失效缓存
+	// 发布评论事件，CommentWorker 消费：写入 comments 表
 	event := mq.CommentEvent{
 		EventID:   fmt.Sprintf("%d-%d", comment.ID, time.Now().UnixNano()),
 		Action:    "publish",
@@ -146,6 +164,15 @@ func (s *InteractionService) PublishComment(ctx context.Context, videoID, author
 	}
 	s.mq.Publish(ctx, "comment.events", "comment.publish", event)
 
+	// 发布热度增量事件（评论权重 +5），由 PopularityWorker 统一更新 Redis 热门窗口
+	popEvent := mq.PopularityEvent{
+		EventID:   fmt.Sprintf("%d-%d", videoID, time.Now().UnixNano()),
+		VideoID:   videoID,
+		Change:    5,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "video.popularity.events", "video.popularity.update", popEvent)
+
 	return comment.ID, nil
 }
 
@@ -157,7 +184,8 @@ func (s *InteractionService) DeleteComment(ctx context.Context, commentID, autho
 	if comment.AuthorID != authorID {
 		return err
 	}
-	// 发布评论删除事件，CommentWorker 消费：更新热度分 + 失效缓存
+
+	// 发布评论删除事件，CommentWorker 消费：软删除
 	event := mq.CommentEvent{
 		EventID:   fmt.Sprintf("%d-%d", commentID, time.Now().UnixNano()),
 		Action:    "delete",
@@ -167,6 +195,16 @@ func (s *InteractionService) DeleteComment(ctx context.Context, commentID, autho
 		OccurredAt: time.Now().UnixMilli(),
 	}
 	s.mq.Publish(ctx, "comment.events", "comment.delete", event)
+
+	// 发布热度增量事件（评论权重 -5），由 PopularityWorker 统一更新 Redis 热门窗口
+	popEvent := mq.PopularityEvent{
+		EventID:   fmt.Sprintf("%d-%d", comment.VideoID, time.Now().UnixNano()),
+		VideoID:   comment.VideoID,
+		Change:    -5,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	s.mq.Publish(ctx, "video.popularity.events", "video.popularity.update", popEvent)
+
 	return s.repo.SoftDeleteComment(ctx, commentID)
 }
 

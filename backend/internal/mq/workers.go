@@ -162,13 +162,7 @@ func (w *LikeWorker) handleLike(ctx context.Context, d amqp.Delivery) {
 		"likes_count": w.repo.DB().Raw("SELECT likes_count + 1 FROM videos WHERE id = ?", e.VideoID),
 	})
 
-	// 更新 Redis 热度分
-	now := time.Now()
-	key := redis.HotVideo("1m", now.Format("200601021504"))
-	w.rdb.ZIncrBy(ctx, key, 1, fmt.Sprintf("%d", e.VideoID))
-	w.rdb.Expire(ctx, key, 2*time.Hour)
-
-	// 删除视频实体缓存（Cache Aside）
+	// Cache Aside：删除视频实体缓存，下次读时重建
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
@@ -187,12 +181,7 @@ func (w *LikeWorker) handleUnlike(ctx context.Context, d amqp.Delivery) {
 		"likes_count": w.repo.DB().Raw("SELECT likes_count - 1 FROM videos WHERE id = ?", e.VideoID),
 	})
 
-	// 更新 Redis 热度分
-	now := time.Now()
-	key := redis.HotVideo("1m", now.Format("200601021504"))
-	w.rdb.ZIncrBy(ctx, key, -1, fmt.Sprintf("%d", e.VideoID))
-
-	// 删除视频实体缓存
+	// Cache Aside：删除视频实体缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
@@ -251,17 +240,12 @@ func (w *CommentWorker) handleCommentPublish(ctx context.Context, d amqp.Deliver
 		return
 	}
 
-	// 更新 MySQL popularity（评论权重 5）
+	// 更新 MySQL popularity（评论权重 5，由 PopularityWorker 通过 MQ 异步更新 Redis 窗口）
 	w.repo.UpdateVideo(ctx, e.VideoID, map[string]interface{}{
 		"popularity": w.repo.DB().Raw("SELECT popularity + 5 FROM videos WHERE id = ?", e.VideoID),
 	})
 
-	// 更新 Redis 热度分
-	now := time.Now()
-	key := redis.HotVideo("1m", now.Format("200601021504"))
-	w.rdb.ZIncrBy(ctx, key, 5, fmt.Sprintf("%d", e.VideoID))
-	w.rdb.Expire(ctx, key, 2*time.Hour)
-	// 删除视频实体缓存
+	// Cache Aside：删除视频实体缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
@@ -275,18 +259,12 @@ func (w *CommentWorker) handleCommentDelete(ctx context.Context, d amqp.Delivery
 		return
 	}
 
-	// 更新 MySQL popularity（评论权重 5）
+	// 更新 MySQL popularity（评论权重 -5）
 	w.repo.UpdateVideo(ctx, e.VideoID, map[string]interface{}{
 		"popularity": w.repo.DB().Raw("SELECT popularity - 5 FROM videos WHERE id = ?", e.VideoID),
 	})
 
-	// 更新 Redis 热度分
-	now := time.Now()
-	key := redis.HotVideo("1m", now.Format("200601021504"))
-	// 评论删除减少 popularity（评论权重 5）
-	w.rdb.ZIncrBy(ctx, key, -5, fmt.Sprintf("%d", e.VideoID))
-
-	// 删除视频实体缓存
+	// Cache Aside：删除视频实体缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
@@ -420,10 +398,15 @@ func (w *PopularityWorker) handlePopularityUpdate(ctx context.Context, d amqp.De
 		return
 	}
 
-	now := time.Now()
-	key := redis.HotVideo("1m", now.Format("200601021504"))
+	// 用事件中的时间戳计算窗口 key，保证一致性
+	t := time.UnixMilli(e.OccurredAt)
+	ts := t.Format("200601021504")
+	key := redis.HotVideo("1m", ts)
 	w.rdb.ZIncrBy(ctx, key, float64(e.Change), fmt.Sprintf("%d", e.VideoID))
 	w.rdb.Expire(ctx, key, 2*time.Hour)
+
+	// Cache Aside：删除视频实体缓存
+	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 }
 
 type OutboxWorker struct {

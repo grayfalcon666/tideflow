@@ -53,6 +53,7 @@ func main() {
 	rateLimiter := infraredis.NewRateLimiter(rdb)
 
 	repo := repository.New(db)
+	cache.SetRepo(repo)
 	authSvc := service.NewAuthService(repo, cfg.JWT.Secret, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 	userSvc := service.NewUserService(repo, cfg.BigVThreshold, mqInstance)
 	videoSvc := service.NewVideoService(repo, cache, cfg.BigVThreshold, cfg.Upload.Dir)
