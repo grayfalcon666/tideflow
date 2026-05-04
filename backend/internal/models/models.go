@@ -24,17 +24,17 @@ func (Account) TableName() string {
 }
 
 type Video struct {
-	ID           uint           `gorm:"primaryKey" json:"id"`
+	ID           uint           `gorm:"primaryKey;index:idx_videos_likes_count_id,priority:2;index:idx_videos_popularity_time_id,priority:3" json:"id"`
 	AuthorID     uint           `gorm:"index:idx_videos_author_create,priority:1;not null" json:"author_id"`
 	Username     string         `gorm:"size:255;not null" json:"username"`
 	Title        string         `gorm:"size:255;not null" json:"title"`
 	Description  string         `gorm:"size:255" json:"description"`
 	PlayURL      string         `gorm:"size:255;not null" json:"play_url"`
 	CoverURL     string         `gorm:"size:255;not null" json:"cover_url"`
-	CreateTime   time.Time      `gorm:"index:idx_videos_author_create,priority:2" json:"create_time"`
+	CreateTime   time.Time      `gorm:"index:idx_videos_author_create,priority:2;index:idx_videos_popularity_time_id,priority:2" json:"create_time"`
 	UpdateTime   time.Time      `json:"update_time"`
-	LikesCount   int64          `gorm:"not null;default:0" json:"likes_count"`
-	Popularity   int64          `gorm:"not null;default:0" json:"popularity"`
+	LikesCount   int64          `gorm:"not null;default:0;index:idx_videos_likes_count_id,priority:1" json:"likes_count"`
+	Popularity   int64          `gorm:"not null;default:0;index:idx_videos_popularity_time_id,priority:1" json:"popularity"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 }
 
@@ -55,11 +55,11 @@ func (Like) TableName() string {
 
 type Comment struct {
 	ID        uint           `gorm:"primaryKey" json:"id"`
-	VideoID   uint           `gorm:"index;not null" json:"video_id"`
+	VideoID   uint           `gorm:"not null;index:idx_comments_video_root,priority:1" json:"video_id"`
 	AuthorID  uint           `gorm:"index;not null" json:"author_id"`
 	Username  string         `gorm:"size:255;index" json:"username"`
-	RootID    uint           `gorm:"not null;default:0" json:"root_id"`
-	ParentID  uint           `gorm:"not null;default:0" json:"parent_id"`
+	RootID    uint           `gorm:"not null;default:0;index:idx_comments_video_root,priority:2" json:"root_id"`
+	ParentID  uint           `gorm:"not null;default:0;index:idx_comments_parent_id,priority:1" json:"parent_id"`
 	Content   string         `gorm:"type:text;not null" json:"content"`
 	CreatedAt time.Time      `gorm:"index" json:"created_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
@@ -71,8 +71,8 @@ func (Comment) TableName() string {
 
 type Social struct {
 	ID         uint `gorm:"primaryKey" json:"id"`
-	FollowerID uint `gorm:"index;not null" json:"follower_id"`
-	VloggerID  uint `gorm:"index;not null" json:"vlogger_id"`
+	FollowerID uint `gorm:"index;not null;uniqueIndex:idx_social_follower_vlogger,priority:1" json:"follower_id"`
+	VloggerID  uint `gorm:"index;not null;uniqueIndex:idx_social_follower_vlogger,priority:2" json:"vlogger_id"`
 }
 
 func (Social) TableName() string {
