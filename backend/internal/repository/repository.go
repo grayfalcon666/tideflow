@@ -135,6 +135,24 @@ func (r *Repository) GetLikesByAccount(ctx context.Context, accountID uint, befo
 	return likes, err
 }
 
+func (r *Repository) GetLikesByAccountAndVideos(ctx context.Context, accountID uint, videoIDs []uint) (map[uint]bool, error) {
+	if len(videoIDs) == 0 || accountID == 0 {
+		return make(map[uint]bool), nil
+	}
+	var likes []*models.Like
+	err := r.db.WithContext(ctx).
+		Where("account_id = ? AND video_id IN ?", accountID, videoIDs).
+		Find(&likes).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[uint]bool, len(likes))
+	for _, l := range likes {
+		result[l.VideoID] = true
+	}
+	return result, nil
+}
+
 func (r *Repository) CreateComment(ctx context.Context, comment *models.Comment) error {
 	return r.db.WithContext(ctx).Create(comment).Error
 }

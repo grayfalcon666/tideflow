@@ -22,12 +22,30 @@ func NewUserService(repo *repository.Repository, bigVThresh int, mqInstance *mq.
 }
 
 type UserProfile struct {
-	ID            uint   `json:"id"`
-	Username      string `json:"username"`
-	AvatarURL     string `json:"avatar_url"`
-	Bio           string `json:"bio"`
-	FollowerCount int    `json:"follower_count"`
-	IsBigV        bool   `json:"is_big_v,omitempty"`
+	ID             uint   `json:"id"`
+	Username       string `json:"username"`
+	AvatarURL      string `json:"avatar_url"`
+	Bio            string `json:"bio"`
+	FollowerCount  int    `json:"follower_count"`
+	FollowingCount int64   `json:"following_count,omitempty"`
+	IsBigV         bool   `json:"is_big_v,omitempty"`
+}
+
+type FollowUserItem struct {
+	ID        uint   `json:"id"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatar_url"`
+	IsBigV    bool   `json:"is_big_v"`
+}
+
+type UserVideoItem struct {
+	VideoID     uint   `json:"video_id"`
+	Title       string `json:"title"`
+	CoverURL    string `json:"cover_url"`
+	CreateTime  int64  `json:"create_time"`
+	LikesCount  int64  `json:"likes_count"`
+	Popularity  int64  `json:"popularity"`
+	IsLiked     bool   `json:"is_liked"`
 }
 
 func (s *UserService) GetUserByID(ctx context.Context, id uint) (*UserProfile, error) {
@@ -35,13 +53,15 @@ func (s *UserService) GetUserByID(ctx context.Context, id uint) (*UserProfile, e
 	if err != nil {
 		return nil, err
 	}
+	followingCount, _ := s.repo.CountFollowing(ctx, id)
 	return &UserProfile{
-		ID:            acc.ID,
-		Username:      acc.Username,
-		AvatarURL:     acc.AvatarURL,
-		Bio:           acc.Bio,
-		FollowerCount: acc.FollowerCount,
-		IsBigV:        acc.FollowerCount >= s.bigVThresh,
+		ID:             acc.ID,
+		Username:       acc.Username,
+		AvatarURL:      acc.AvatarURL,
+		Bio:            acc.Bio,
+		FollowerCount:  acc.FollowerCount,
+		FollowingCount: followingCount,
+		IsBigV:         acc.FollowerCount >= s.bigVThresh,
 	}, nil
 }
 
@@ -122,7 +142,7 @@ func (s *UserService) Unfollow(ctx context.Context, followerID, vloggerID uint) 
 	return nil
 }
 
-func (s *UserService) GetFollowing(ctx context.Context, userID uint, cursor string, limit int) ([]*UserProfile, *string, bool, error) {
+func (s *UserService) GetFollowing(ctx context.Context, userID uint, cursor string, limit int) ([]*FollowUserItem, *string, bool, error) {
 	var cur int64
 	if cursor != "" {
 		parsed, err := strconv.ParseInt(cursor, 10, 64)
@@ -141,15 +161,13 @@ func (s *UserService) GetFollowing(ctx context.Context, userID uint, cursor stri
 		accounts = accounts[:limit]
 	}
 
-	profiles := make([]*UserProfile, len(accounts))
+	items := make([]*FollowUserItem, len(accounts))
 	for i, acc := range accounts {
-		profiles[i] = &UserProfile{
-			ID:            acc.ID,
-			Username:      acc.Username,
-			AvatarURL:     acc.AvatarURL,
-			Bio:           acc.Bio,
-			FollowerCount: acc.FollowerCount,
-			IsBigV:        acc.FollowerCount >= s.bigVThresh,
+		items[i] = &FollowUserItem{
+			ID:        acc.ID,
+			Username:  acc.Username,
+			AvatarURL: acc.AvatarURL,
+			IsBigV:    acc.FollowerCount >= s.bigVThresh,
 		}
 	}
 
@@ -159,10 +177,10 @@ func (s *UserService) GetFollowing(ctx context.Context, userID uint, cursor stri
 		nextCursor = &nc
 	}
 
-	return profiles, nextCursor, hasMore, nil
+	return items, nextCursor, hasMore, nil
 }
 
-func (s *UserService) GetFollowers(ctx context.Context, userID uint, cursor string, limit int) ([]*UserProfile, *string, bool, error) {
+func (s *UserService) GetFollowers(ctx context.Context, userID uint, cursor string, limit int) ([]*FollowUserItem, *string, bool, error) {
 	var cur int64
 	if cursor != "" {
 		parsed, err := strconv.ParseInt(cursor, 10, 64)
@@ -181,15 +199,13 @@ func (s *UserService) GetFollowers(ctx context.Context, userID uint, cursor stri
 		accounts = accounts[:limit]
 	}
 
-	profiles := make([]*UserProfile, len(accounts))
+	items := make([]*FollowUserItem, len(accounts))
 	for i, acc := range accounts {
-		profiles[i] = &UserProfile{
-			ID:            acc.ID,
-			Username:      acc.Username,
-			AvatarURL:     acc.AvatarURL,
-			Bio:           acc.Bio,
-			FollowerCount: acc.FollowerCount,
-			IsBigV:        acc.FollowerCount >= s.bigVThresh,
+		items[i] = &FollowUserItem{
+			ID:        acc.ID,
+			Username:  acc.Username,
+			AvatarURL: acc.AvatarURL,
+			IsBigV:    acc.FollowerCount >= s.bigVThresh,
 		}
 	}
 
@@ -199,7 +215,7 @@ func (s *UserService) GetFollowers(ctx context.Context, userID uint, cursor stri
 		nextCursor = &nc
 	}
 
-	return profiles, nextCursor, hasMore, nil
+	return items, nextCursor, hasMore, nil
 }
 
 func (s *UserService) GetSocialCounts(ctx context.Context, userID uint) (map[string]int64, error) {
@@ -217,7 +233,7 @@ func (s *UserService) GetSocialCounts(ctx context.Context, userID uint) (map[str
 	}, nil
 }
 
-func (s *UserService) GetUserVideos(ctx context.Context, userID, requesterID uint, cursor string, limit int) ([]*models.Video, *string, bool, error) {
+func (s *UserService) GetUserVideos(ctx context.Context, userID, requesterID uint, cursor string, limit int) ([]*UserVideoItem, *string, bool, error) {
 	var before time.Time
 	if cursor != "" {
 		ts, err := strconv.ParseInt(cursor, 10, 64)
@@ -236,11 +252,34 @@ func (s *UserService) GetUserVideos(ctx context.Context, userID, requesterID uin
 		videos = videos[:limit]
 	}
 
+	// 批量查询 requester 对这些视频的点赞状态
+	videoIDs := make([]uint, len(videos))
+	for i, v := range videos {
+		videoIDs[i] = v.ID
+	}
+	likedMap := make(map[uint]bool)
+	if requesterID != 0 && len(videoIDs) > 0 {
+		likedMap, _ = s.repo.GetLikesByAccountAndVideos(ctx, requesterID, videoIDs)
+	}
+
+	items := make([]*UserVideoItem, len(videos))
+	for i, v := range videos {
+		items[i] = &UserVideoItem{
+			VideoID:    v.ID,
+			Title:      v.Title,
+			CoverURL:   v.CoverURL,
+			CreateTime: v.CreateTime.UnixMilli(),
+			LikesCount: v.LikesCount,
+			Popularity: v.Popularity,
+			IsLiked:   likedMap[v.ID],
+		}
+	}
+
 	var nextCursor *string
 	if hasMore && len(videos) > 0 {
 		nc := strconv.FormatInt(videos[len(videos)-1].CreateTime.UnixMilli(), 10)
 		nextCursor = &nc
 	}
 
-	return videos, nextCursor, hasMore, nil
+	return items, nextCursor, hasMore, nil
 }
