@@ -56,7 +56,7 @@ const formatCount = (n: number) => {
     </div>
     <div class="action-item" @click="openComments">
       <TFIcon name="chat_bubble_outline" :size="28" />
-      <span class="action-count">{{ formatCount(item.comment_count) }}</span>
+      <span class="action-count">{{ formatCount(item.comment_count ?? 0) }}</span>
     </div>
     <div class="action-item">
       <TFIcon name="share" :size="28" />

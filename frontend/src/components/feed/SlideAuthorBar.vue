@@ -42,7 +42,10 @@ const goToUser = () => {
 <template>
   <div class="slide-author-bar">
     <q-avatar size="40px" class="author-avatar" @click="goToUser">
-      <img :src="item.author.avatar_url || '/default-avatar.svg'" />
+      <div
+        class="author-avatar-img"
+        :style="{ backgroundImage: `url('${item.author.avatar_url || '/default-avatar.svg'}')` }"
+      />
     </q-avatar>
     <div class="author-info">
       <span class="author-name" @click="goToUser">
@@ -73,6 +76,21 @@ const goToUser = () => {
 .author-avatar {
   cursor: pointer;
   border: 2px solid rgba(255, 255, 255, 0.3);
+  background: transparent !important;
+  overflow: hidden;
+
+  :deep(.q-avatar__content) {
+    padding: 0 !important;
+  }
+}
+
+.author-avatar-img {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: block;
 }
 
 .author-info {

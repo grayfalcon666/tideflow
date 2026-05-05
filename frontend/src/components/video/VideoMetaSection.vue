@@ -82,7 +82,10 @@ const share = async () => {
   <div class="video-meta-section">
     <div class="author-row">
       <q-avatar size="44px" @click="router.push(`/u/${video.author.id}`)" class="author-avatar">
-        <img :src="video.author.avatar_url || '/default-avatar.svg'" />
+        <div
+          class="author-avatar-img"
+          :style="{ backgroundImage: `url('${video.author.avatar_url || '/default-avatar.svg'}')` }"
+        />
       </q-avatar>
       <div class="author-info" @click="router.push(`/u/${video.author.id}`)">
         <span class="author-name">
@@ -150,6 +153,21 @@ const share = async () => {
 .author-avatar {
   cursor: pointer;
   flex-shrink: 0;
+  background: transparent !important;
+  overflow: hidden;
+
+  :deep(.q-avatar__content) {
+    padding: 0 !important;
+  }
+}
+
+.author-avatar-img {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: block;
 }
 
 .author-info {

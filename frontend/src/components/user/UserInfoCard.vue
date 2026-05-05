@@ -21,7 +21,10 @@ const formatCount = (n: number) => {
   <div class="user-info-card">
     <div class="card-main">
       <q-avatar size="80px" class="avatar" @click="router.push(`/u/${user.id}`)">
-        <img :src="user.avatar_url || '/default-avatar.svg'" />
+        <div
+          class="avatar-img"
+          :style="{ backgroundImage: `url('${user.avatar_url || '/default-avatar.svg'}')` }"
+        />
       </q-avatar>
       <div class="user-info">
         <div class="username-row">
@@ -68,6 +71,21 @@ const formatCount = (n: number) => {
   cursor: pointer;
   flex-shrink: 0;
   border: 2px solid var(--border);
+  background: transparent !important;
+  overflow: hidden;
+
+  :deep(.q-avatar__content) {
+    padding: 0 !important;
+  }
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: block;
 }
 
 .user-info {
