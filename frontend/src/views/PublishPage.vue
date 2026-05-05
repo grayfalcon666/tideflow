@@ -109,6 +109,8 @@ const goToStep3 = async () => {
   }
 }
 
+const customTagInput = ref('')
+
 const toggleTag = (tag: string) => {
   const idx = selectedTags.value.indexOf(tag)
   if (idx >= 0) {
@@ -116,6 +118,20 @@ const toggleTag = (tag: string) => {
   } else if (selectedTags.value.length < 10) {
     selectedTags.value.push(tag)
   }
+}
+
+const addCustomTags = () => {
+  const input = customTagInput.value.trim()
+  if (!input) return
+  // 支持空格/逗号/回车分割
+  const tags = input.split(/[\s,，]+/).filter(t => t.length > 0 && t.length <= 50)
+  for (const tag of tags) {
+    if (selectedTags.value.length >= 10) break
+    if (!selectedTags.value.includes(tag)) {
+      selectedTags.value.push(tag)
+    }
+  }
+  customTagInput.value = ''
 }
 
 const validateTitle = () => {
@@ -232,6 +248,23 @@ const publish = async () => {
             :class="{ selected: selectedTags.includes(tag.name) }"
             @click="toggleTag(tag.name)"
           ># {{ tag.name }}</span>
+        </div>
+        <div class="custom-tag-input">
+          <q-input
+            v-model="customTagInput"
+            placeholder="输入自定义标签（空格/逗号分隔），回车添加"
+            outlined
+            dense
+            dark
+            @keydown.enter.prevent="addCustomTags"
+            class="custom-tag-field"
+          />
+          <q-btn flat no-caps label="添加" color="primary" @click="addCustomTags" />
+        </div>
+        <div v-if="selectedTags.length" class="selected-tags">
+          <span v-for="t in selectedTags" :key="t" class="tag-chip" @click="toggleTag(t)">
+            # {{ t }} <span class="remove-tag">×</span>
+          </span>
         </div>
       </div>
       <q-btn class="next-btn" no-caps label="下一步" color="primary" @click="goToStep4" />
@@ -367,6 +400,42 @@ const publish = async () => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.custom-tag-input {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+
+  .custom-tag-field {
+    flex: 1;
+  }
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.tag-chip {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  cursor: pointer;
+
+  .remove-tag {
+    margin-left: 4px;
+    opacity: 0.7;
+  }
+
+  &:hover .remove-tag {
+    opacity: 1;
+  }
 }
 
 .tag-item {
