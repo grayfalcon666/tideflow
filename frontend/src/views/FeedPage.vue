@@ -1,0 +1,180 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import FeedTabBar from '../components/feed/FeedTabBar.vue'
+import FeedSwiper from '../components/feed/FeedSwiper.vue'
+import VideoPlayer from '../components/video/VideoPlayer.vue'
+import SlideAuthorBar from '../components/feed/SlideAuthorBar.vue'
+import SlideInfoBar from '../components/feed/SlideInfoBar.vue'
+import SlideActionBar from '../components/feed/SlideActionBar.vue'
+import { useFeedStore, type FeedTab } from '../stores/feed'
+import { useAuthStore } from '../stores/auth'
+import { useNotificationStore } from '../stores/notification'
+import type { VideoItem } from '../types'
+
+const router = useRouter()
+const feedStore = useFeedStore()
+const authStore = useAuthStore()
+const notifStore = useNotificationStore()
+
+const activeTab = ref<FeedTab>('latest')
+const activeIndex = ref(0)
+const showCommentsFor = ref<number | null>(null)
+
+const items = computed(() =>
+  activeTab.value === 'latest' ? feedStore.latestItems : feedStore.followingItems
+)
+const hasMore = computed(() =>
+  activeTab.value === 'latest' ? feedStore.latestHasMore : feedStore.followingHasMore
+)
+const isLoading = computed(() =>
+  activeTab.value === 'latest' ? feedStore.latestLoading : feedStore.followingLoading
+)
+
+const loadData = (reset = false) => {
+  if (activeTab.value === 'latest') {
+    feedStore.loadLatest(reset)
+  } else {
+    feedStore.loadFollowing(reset)
+  }
+}
+
+const onTabChange = (tab: FeedTab) => {
+  activeTab.value = tab
+  activeIndex.value = 0
+  loadData(true)
+}
+
+const swiperRef = ref()
+
+watch(activeIndex, () => {
+  if (activeIndex.value >= items.value.length - 3 && hasMore.value && !isLoading.value) {
+    feedStore.loadMore(activeTab.value)
+  }
+})
+
+onMounted(() => {
+  loadData()
+  window.addEventListener('keydown', onKeyDown)
+  if (authStore.isLoggedIn) {
+    notifStore.connectSSE()
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeyDown)
+})
+
+// Keyboard shortcuts
+const onKeyDown = (e: KeyboardEvent) => {
+  const tag = (e.target as HTMLElement).tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  switch (e.key) {
+    case 'ArrowUp':
+    case 'w':
+    case 'W':
+      activeIndex.value = Math.max(0, activeIndex.value - 1)
+      break
+    case 'ArrowDown':
+    case 's':
+    case 'S':
+      activeIndex.value = Math.min(items.value.length - 1, activeIndex.value + 1)
+      break
+    case ' ':
+      e.preventDefault()
+      break
+    case 'c':
+    case 'C':
+      showCommentsFor.value = items.value[activeIndex.value]?.video_id ?? null
+      break
+  }
+}
+</script>
+
+<template>
+  <div class="feed-page">
+    <FeedTabBar :activeTab="activeTab" @update:tab="onTabChange" />
+
+    <FeedSwiper
+      ref="swiperRef"
+      :items="items"
+      :activeIndex="activeIndex"
+      @update:activeIndex="activeIndex = $event"
+      @reachEnd="feedStore.loadMore(activeTab)"
+    >
+      <div
+        v-for="(item, idx) in items"
+        :key="item?.video_id ?? idx"
+        class="feed-slide-wrap"
+        :data-idx="idx"
+        :data-active="idx === activeIndex"
+      >
+        <VideoPlayer
+          :src="item && idx === activeIndex ? item.play_url : ''"
+          :poster="item?.cover_url ?? ''"
+          :muted="true"
+          :autoPlay="idx === activeIndex"
+        />
+        <div class="slide-overlay-author">
+          <SlideAuthorBar :item="item" />
+        </div>
+        <div class="slide-overlay-info">
+          <SlideInfoBar :item="item" />
+        </div>
+        <div class="slide-overlay-actions">
+          <SlideActionBar :item="item" @openComments="showCommentsFor = $event" />
+        </div>
+        <div class="slide-debug">slide {{ idx }} {{ idx === activeIndex ? '(ACTIVE)' : '' }}</div>
+      </div>
+    </FeedSwiper>
+  </div>
+</template>
+
+<style scoped lang="scss">
+.feed-page {
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+.feed-slide-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.slide-debug {
+  position: absolute;
+  top: 40px;
+  left: 4px;
+  background: rgba(0,0,0,0.6);
+  color: #0f0;
+  font-size: 11px;
+  z-index: 99;
+  pointer-events: none;
+}
+
+.slide-overlay-author {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 2;
+}
+
+.slide-overlay-info {
+  position: absolute;
+  bottom: 80px;
+  left: 0;
+  right: 80px;
+  z-index: 2;
+}
+
+.slide-overlay-actions {
+  position: absolute;
+  right: var(--space-4);
+  bottom: 100px;
+  z-index: 2;
+}
+</style>

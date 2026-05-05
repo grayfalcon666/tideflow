@@ -1,0 +1,183 @@
+:root {
+  /* === TideFlow Theme: Dark Immersive (Spotify-inspired) === */
+
+  /* Background layers */
+  --bg-base: #121212;
+  --bg-surface: #181818;
+  --bg-elevated: #1f1f1f;
+  --bg-card: #252525;
+  --bg-card-alt: #272727;
+
+  /* Brand accent */
+  --accent: #1ed760;
+  --accent-hover: #1db954;
+  --accent-dim: rgba(30, 215, 96, 0.15);
+
+  /* Text */
+  --text-base: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-muted: #7c7c7c;
+  --text-inactive: #4d4d4d;
+
+  /* Semantic */
+  --text-negative: #f3727f;
+  --text-warning: #ffa42b;
+  --text-info: #539df5;
+
+  /* Border & dividers */
+  --border: #4d4d4d;
+  --border-light: #7c7c7c;
+  --separator: #b3b3b3;
+  --border-accent: #1db954;
+
+  /* Shadows */
+  --shadow-card: rgba(0, 0, 0, 0.3) 0 8px 8px;
+  --shadow-elevated: rgba(0, 0, 0, 0.5) 0 8px 24px;
+  --shadow-inset: rgb(18, 18, 18) 0 1px 0px, rgb(124, 124, 124) 0 0px 0px 1px inset;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 500px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-ui: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', helvetica, arial, sans-serif;
+  --font-title: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', helvetica, arial, sans-serif;
+  --font-fallback: 'Helvetica Neue', helvetica, arial, sans-serif;
+
+  /* Sidebar */
+  --sidebar-width: 240px;
+  --sidebar-width-collapsed: 72px;
+  --bottom-nav-height: 56px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-base);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-x: hidden;
+}
+
+#app {
+  min-height: 100svh;
+  display: flex;
+  justify-content: center;
+}
+
+/* === Typography === */
+h1, h2, h3 {
+  font-family: var(--font-title);
+  font-weight: 700;
+  color: var(--text-base);
+  margin: 0;
+}
+
+h1 { font-size: 24px; }
+h2 { font-size: 18px; font-weight: 600; }
+h3 { font-size: 16px; font-weight: 700; }
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+
+/* === Utility classes === */
+.text-muted { color: var(--text-secondary); }
+.text-accent { color: var(--accent); }
+.text-negative { color: var(--text-negative); }
+
+.bg-surface { background: var(--bg-surface); }
+.bg-elevated { background: var(--bg-elevated); }
+.bg-card { background: var(--bg-card); }
+
+/* === Scrollbar === */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-light);
+}
+
+/* === Quasar overrides === */
+.q-drawer {
+  background: var(--bg-surface) !important;
+}
+
+.q-item {
+  color: var(--text-base);
+  min-height: 40px;
+}
+
+.q-item__label--secondary {
+  color: var(--text-secondary);
+}
+
+.q-btn--flat {
+  color: var(--text-base);
+}
+
+/* === Animations === */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-normal) ease forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp var(--transition-slow) ease forwards;
+}
