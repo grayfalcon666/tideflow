@@ -150,6 +150,7 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 			"id":             author.ID,
 			"username":       author.Username,
 			"avatar_url":     author.AvatarURL,
+			"bio":            author.Bio,
 			"follower_count": author.FollowerCount,
 		}
 	}

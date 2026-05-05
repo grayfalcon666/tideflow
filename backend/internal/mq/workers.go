@@ -94,7 +94,7 @@ func (w *TimelineWorker) handleVideoPublish(ctx context.Context, d amqp.Delivery
 	}
 
 	// 5. 删除作者的冷拉取缓存（可选）
-	pattern := fmt.Sprintf("v1:feed:followcache:%d:*", e.AuthorID)
+	pattern := fmt.Sprintf("%s:feed:followcache:%d:*", redis.Version, e.AuthorID)
 	iter := w.rdb.Scan(ctx, 0, pattern, 100).Iterator()
 	for iter.Next(ctx) {
 		w.rdb.Del(ctx, iter.Val())
