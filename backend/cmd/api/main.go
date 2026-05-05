@@ -74,14 +74,13 @@ func main() {
 	interactionHandler := handler.NewInteractionHandler(interactionSvc)
 	msgHandler := handler.NewMessageHandler(msgSvc)
 	notifHandler := handler.NewNotificationHandler(notifSvc)
-	sseHandler := handler.NewSSEHandler(nil)
 	tagHandler := handler.NewTagHandler(tagSvc)
-
-	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler)
 
 	hub := mq.NewSSEHub()
 	go hub.Run()
-	sseHandler = handler.NewSSEHandler(hub)
+	sseHandler := handler.NewSSEHandler(hub)
+
+	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, cfg)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
@@ -133,8 +132,13 @@ func setupRouter(
 	notifHandler *handler.NotificationHandler,
 	sseHandler *handler.SSEHandler,
 	tagHandler *handler.TagHandler,
+	cfg *config.Config,
 ) *gin.Engine {
 	r := gin.Default()
+
+	// 静态文件：视频和封面
+	r.Static("/videos", cfg.Upload.Dir+"/videos")
+	r.Static("/covers", cfg.Upload.Dir+"/covers")
 
 	r.POST("/api/v1/auth/register", rateLimitMw.RegisterLimit(), authHandler.Register)
 	r.POST("/api/v1/auth/login", rateLimitMw.LoginLimit(), authHandler.Login)
