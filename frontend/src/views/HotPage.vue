@@ -1,10 +1,52 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as feedService from '../services/feed'
 import TFIcon from '../components/common/TFIcon.vue'
 
 type WindowOption = '1m' | '5m' | '15m' | '1h' | '6h'
+
+type RawVideoItem = {
+  id: number
+  author_id: number
+  username: string
+  avatar_url?: string
+  title: string
+  description?: string
+  play_url: string
+  cover_url: string
+  create_time: string
+  likes_count: number
+  comment_count: number
+  popularity: number
+  is_liked: boolean
+  is_big_v?: boolean
+  tags?: string[]
+}
+
+const normalizeVideos = (items: RawVideoItem[]): any[] =>
+  (items ?? []).filter(Boolean).map(v => ({
+    video_id: v.id,
+    author_id: v.author_id,
+    username: v.username,
+    title: v.title,
+    description: v.description,
+    play_url: v.play_url,
+    cover_url: v.cover_url,
+    create_time: new Date(v.create_time).getTime() / 1000,
+    likes_count: v.likes_count,
+    comment_count: v.comment_count,
+    popularity: v.popularity,
+    is_liked: v.is_liked,
+    author: {
+      id: v.author_id,
+      username: v.username,
+      avatar_url: v.avatar_url ?? '',
+      follower_count: 0,
+      is_big_v: v.is_big_v ?? false,
+    },
+    tags: v.tags,
+  }))
 
 const router = useRouter()
 const activeWindow = ref<WindowOption>('1h')
@@ -33,9 +75,9 @@ const load = async (reset = false) => {
     const d = resp.data.data
     if (!d) return
     if (reset) {
-      items.value = d.items ?? []
+      items.value = normalizeVideos(d.items as RawVideoItem[])
     } else {
-      items.value.push(...(d.items ?? []))
+      items.value.push(...normalizeVideos(d.items as RawVideoItem[]))
     }
     cursor.value = d.next_cursor ?? '0'
     hasMore.value = d.has_more ?? false

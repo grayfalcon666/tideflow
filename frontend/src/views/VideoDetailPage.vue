@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import VideoPlayer from '../components/video/VideoPlayer.vue'
 import VideoMetaSection from '../components/video/VideoMetaSection.vue'
 import VideoCommentPreview from '../components/video/VideoCommentPreview.vue'
 import CommentDrawer from '../components/comment/CommentDrawer.vue'
+import { useVideoControls } from '../composables/useVideoControls'
 import * as videoService from '../services/video'
 import type { VideoDetail } from '../types'
 import TFIcon from '../components/common/TFIcon.vue'
@@ -16,6 +17,12 @@ const loading = ref(true)
 const error = ref('')
 const showDrawer = ref(false)
 
+const { isMuted } = useVideoControls((key) => {
+  if (key === 'c' || key === 'C') {
+    showDrawer.value = true
+  }
+})
+
 const videoId = Number(route.params.id)
 
 const fetchVideo = async () => {
@@ -23,7 +30,8 @@ const fetchVideo = async () => {
     const resp = await videoService.getVideo(videoId)
     const d = resp.data.data
     if (d) {
-      video.value = d
+      // Normalize: backend returns "id" but components expect "video_id"
+      video.value = { ...d, video_id: d.id } as VideoDetail
     } else {
       error.value = '视频不存在或已删除'
     }
@@ -34,20 +42,8 @@ const fetchVideo = async () => {
   }
 }
 
-const onKeyDown = (e: KeyboardEvent) => {
-  if ((e.target as HTMLElement).tagName === 'INPUT') return
-  if (e.key === 'c' || e.key === 'C') {
-    showDrawer.value = true
-  }
-}
-
 onMounted(async () => {
   await fetchVideo()
-  window.addEventListener('keydown', onKeyDown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeyDown)
 })
 </script>
 
@@ -70,7 +66,7 @@ onUnmounted(() => {
         <VideoPlayer
           :src="video.play_url"
           :poster="video.cover_url"
-          :muted="true"
+          :muted="isMuted"
           :autoPlay="true"
         />
       </div>
