@@ -113,6 +113,20 @@ func (m *MQ) Consume(queue string) (<-chan amqp.Delivery, error) {
 	return m.channel.Consume(queue, "", false, false, false, false, nil)
 }
 
+func (m *MQ) OpenChannel() (*amqp.Channel, error) {
+	return m.conn.Channel()
+}
+
+func (m *MQ) ReconnectWithChannel(ch *amqp.Channel) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.channel != nil {
+		m.channel.Close()
+	}
+	m.channel = ch
+	return nil
+}
+
 func (m *MQ) Close() {
 	if m.channel != nil {
 		m.channel.Close()

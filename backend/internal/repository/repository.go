@@ -108,6 +108,27 @@ func (r *Repository) SoftDeleteVideo(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Model(&models.Video{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
 }
 
+func (r *Repository) IncrementLikesCount(ctx context.Context, id uint, delta int64) error {
+	return r.db.WithContext(ctx).Exec(
+		"UPDATE videos SET likes_count = likes_count + ? WHERE id = ? AND deleted_at IS NULL",
+		delta, id,
+	).Error
+}
+
+func (r *Repository) IncrementFollowerCount(ctx context.Context, id uint, delta int64) error {
+	return r.db.WithContext(ctx).Exec(
+		"UPDATE accounts SET follower_count = follower_count + ? WHERE id = ?",
+		delta, id,
+	).Error
+}
+
+func (r *Repository) IncrementVideoPopularity(ctx context.Context, id uint, delta int64) error {
+	return r.db.WithContext(ctx).Exec(
+		"UPDATE videos SET popularity = popularity + ? WHERE id = ? AND deleted_at IS NULL",
+		delta, id,
+	).Error
+}
+
 func (r *Repository) CreateLike(ctx context.Context, like *models.Like) error {
 	return r.db.WithContext(ctx).Create(like).Error
 }

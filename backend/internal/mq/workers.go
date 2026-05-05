@@ -26,26 +26,48 @@ func NewTimelineWorker(mq *MQ, rdb *goredis.Client, repo *repository.Repository,
 	return &TimelineWorker{mq: mq, rdb: rdb, repo: repo, bigVThresh: bigVThresh}
 }
 
-func (w *TimelineWorker) Start(ctx context.Context) error {
-	msgs, err := w.mq.Consume("video.publish.queue")
-	if err != nil {
-		return err
-	}
+func (w *TimelineWorker) consumeWithRetry(ctx context.Context, queue string, handler func(context.Context, amqp.Delivery)) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 
-	go func() {
+		msgs, err := w.mq.Consume(queue)
+		if err != nil {
+			log.Printf("failed to consume %s, reopening channel: %v", queue, err)
+			ch, err := w.mq.OpenChannel()
+			if err != nil {
+				log.Printf("failed to open new channel: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			if err := w.mq.ReconnectWithChannel(ch); err != nil {
+				log.Printf("failed to reconnect: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			continue
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-msgs:
-				if !ok {
-					return
+			case d, more := <-msgs:
+				if !more {
+					log.Printf("%s channel closed, reopening", queue)
+					break
 				}
-				w.handleVideoPublish(ctx, d)
+				handler(ctx, d)
 			}
 		}
-	}()
+	}
+}
 
+func (w *TimelineWorker) Start(ctx context.Context) error {
+	go w.consumeWithRetry(ctx, "video.publish.queue", w.handleVideoPublish)
 	return nil
 }
 
@@ -115,19 +137,32 @@ func NewLikeWorker(mq *MQ, repo *repository.Repository, rdb *goredis.Client, big
 }
 
 func (w *LikeWorker) Start(ctx context.Context) error {
-	likeMsgs, _ := w.mq.Consume("like.like.queue")
-	unlikeMsgs, _ := w.mq.Consume("like.unlike.queue")
-
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-likeMsgs:
-				if !ok {
+			default:
+			}
+
+			likeMsgs, err := w.mq.Consume("like.like.queue")
+			if err != nil {
+				log.Printf("failed to consume like.like.queue: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case d, more := <-likeMsgs:
+					if !more {
+						log.Println("like.like.queue channel closed, reopening")
+						break
+					}
+					w.handleLike(ctx, d)
 				}
-				w.handleLike(ctx, d)
 			}
 		}
 	}()
@@ -137,11 +172,27 @@ func (w *LikeWorker) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-unlikeMsgs:
-				if !ok {
+			default:
+			}
+
+			unlikeMsgs, err := w.mq.Consume("like.unlike.queue")
+			if err != nil {
+				log.Printf("failed to consume like.unlike.queue: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case d, more := <-unlikeMsgs:
+					if !more {
+						log.Println("like.unlike.queue channel closed, reopening")
+						break
+					}
+					w.handleUnlike(ctx, d)
 				}
-				w.handleUnlike(ctx, d)
 			}
 		}
 	}()
@@ -158,9 +209,11 @@ func (w *LikeWorker) handleLike(ctx context.Context, d amqp.Delivery) {
 	}
 
 	// 更新 MySQL likes_count
-	w.repo.UpdateVideo(ctx, e.VideoID, map[string]interface{}{
-		"likes_count": w.repo.DB().Raw("SELECT likes_count + 1 FROM videos WHERE id = ?", e.VideoID),
-	})
+	if err := w.repo.IncrementLikesCount(ctx, e.VideoID, 1); err != nil {
+		log.Printf("failed to increment likes_count for video %d: %v", e.VideoID, err)
+		d.Nack(false, true) // requeue
+		return
+	}
 
 	// Cache Aside：删除视频实体缓存和详情缓存，下次读时重建
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
@@ -178,9 +231,11 @@ func (w *LikeWorker) handleUnlike(ctx context.Context, d amqp.Delivery) {
 	}
 
 	// 更新 MySQL likes_count
-	w.repo.UpdateVideo(ctx, e.VideoID, map[string]interface{}{
-		"likes_count": w.repo.DB().Raw("SELECT likes_count - 1 FROM videos WHERE id = ?", e.VideoID),
-	})
+	if err := w.repo.IncrementLikesCount(ctx, e.VideoID, -1); err != nil {
+		log.Printf("failed to decrement likes_count for video %d: %v", e.VideoID, err)
+		d.Nack(false, true) // requeue
+		return
+	}
 
 	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
@@ -200,19 +255,32 @@ func NewCommentWorker(mq *MQ, rdb *goredis.Client, repo *repository.Repository) 
 }
 
 func (w *CommentWorker) Start(ctx context.Context) error {
-	publishMsgs, _ := w.mq.Consume("comment.publish.queue")
-	deleteMsgs, _ := w.mq.Consume("comment.delete.queue")
-
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-publishMsgs:
-				if !ok {
+			default:
+			}
+
+			msgs, err := w.mq.Consume("comment.publish.queue")
+			if err != nil {
+				log.Printf("failed to consume comment.publish.queue: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case d, more := <-msgs:
+					if !more {
+						log.Println("comment.publish.queue channel closed, reopening")
+						break
+					}
+					w.handleCommentPublish(ctx, d)
 				}
-				w.handleCommentPublish(ctx, d)
 			}
 		}
 	}()
@@ -222,11 +290,27 @@ func (w *CommentWorker) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-deleteMsgs:
-				if !ok {
+			default:
+			}
+
+			msgs, err := w.mq.Consume("comment.delete.queue")
+			if err != nil {
+				log.Printf("failed to consume comment.delete.queue: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case d, more := <-msgs:
+					if !more {
+						log.Println("comment.delete.queue channel closed, reopening")
+						break
+					}
+					w.handleCommentDelete(ctx, d)
 				}
-				w.handleCommentDelete(ctx, d)
 			}
 		}
 	}()
@@ -243,9 +327,10 @@ func (w *CommentWorker) handleCommentPublish(ctx context.Context, d amqp.Deliver
 	}
 
 	// 更新 MySQL popularity（评论权重 5，由 PopularityWorker 通过 MQ 异步更新 Redis 窗口）
-	w.repo.UpdateVideo(ctx, e.VideoID, map[string]interface{}{
-		"popularity": w.repo.DB().Raw("SELECT popularity + 5 FROM videos WHERE id = ?", e.VideoID),
-	})
+	if err := w.repo.IncrementVideoPopularity(ctx, e.VideoID, 5); err != nil {
+		log.Printf("failed to increment popularity for video %d: %v", e.VideoID, err)
+		return
+	}
 
 	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
@@ -263,9 +348,10 @@ func (w *CommentWorker) handleCommentDelete(ctx context.Context, d amqp.Delivery
 	}
 
 	// 更新 MySQL popularity（评论权重 -5）
-	w.repo.UpdateVideo(ctx, e.VideoID, map[string]interface{}{
-		"popularity": w.repo.DB().Raw("SELECT popularity - 5 FROM videos WHERE id = ?", e.VideoID),
-	})
+	if err := w.repo.IncrementVideoPopularity(ctx, e.VideoID, -5); err != nil {
+		log.Printf("failed to decrement popularity for video %d: %v", e.VideoID, err)
+		return
+	}
 
 	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
@@ -285,38 +371,49 @@ func NewSocialWorker(mq *MQ, rdb *goredis.Client, repo *repository.Repository, b
 	return &SocialWorker{mq: mq, rdb: rdb, repo: repo, bigVThresh: bigVThresh}
 }
 
+func (w *SocialWorker) consumeWithRetry(ctx context.Context, queue string, handler func(context.Context, amqp.Delivery)) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		msgs, err := w.mq.Consume(queue)
+		if err != nil {
+			log.Printf("failed to consume %s, reopening channel: %v", queue, err)
+			ch, err := w.mq.OpenChannel()
+			if err != nil {
+				log.Printf("failed to open new channel: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			if err := w.mq.ReconnectWithChannel(ch); err != nil {
+				log.Printf("failed to reconnect: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			continue
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case d, more := <-msgs:
+				if !more {
+					log.Printf("%s channel closed, reopening", queue)
+					break
+				}
+				handler(ctx, d)
+			}
+		}
+	}
+}
+
 func (w *SocialWorker) Start(ctx context.Context) error {
-	followMsgs, _ := w.mq.Consume("social.follow.queue")
-	unfollowMsgs, _ := w.mq.Consume("social.unfollow.queue")
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case d, ok := <-followMsgs:
-				if !ok {
-					return
-				}
-				w.handleFollow(ctx, d)
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case d, ok := <-unfollowMsgs:
-				if !ok {
-					return
-				}
-				w.handleUnfollow(ctx, d)
-			}
-		}
-	}()
-
+	go w.consumeWithRetry(ctx, "social.follow.queue", w.handleFollow)
+	go w.consumeWithRetry(ctx, "social.unfollow.queue", w.handleUnfollow)
 	return nil
 }
 
@@ -324,35 +421,45 @@ func (w *SocialWorker) handleFollow(ctx context.Context, d amqp.Delivery) {
 	e, err := ParseSocialEvent(d)
 	if err != nil {
 		log.Printf("failed to parse social follow event: %v", err)
+		d.Nack(false, false)
 		return
 	}
 
 	// 更新博主粉丝计数（+1）
-	w.repo.UpdateAccount(ctx, e.VloggerID, map[string]interface{}{
-		"follower_count": w.repo.DB().Raw("SELECT follower_count + 1 FROM accounts WHERE id = ?", e.VloggerID),
-	})
+	if err := w.repo.IncrementFollowerCount(ctx, e.VloggerID, 1); err != nil {
+		log.Printf("failed to increment follower_count for account %d: %v", e.VloggerID, err)
+		d.Nack(false, true)
+		return
+	}
 
 	// 删除粉丝的冷拉取缓存
 	w.deleteFeedCache(ctx, e.FollowerID)
 
 	// 如果博主之前是大V，降级后应删除其大V标记缓存
 	w.rdb.Del(ctx, redis.BigVMark(e.VloggerID))
+
+	d.Ack(false)
 }
 
 func (w *SocialWorker) handleUnfollow(ctx context.Context, d amqp.Delivery) {
 	e, err := ParseSocialEvent(d)
 	if err != nil {
 		log.Printf("failed to parse social unfollow event: %v", err)
+		d.Nack(false, false)
 		return
 	}
 
 	// 更新博主粉丝计数（-1）
-	w.repo.UpdateAccount(ctx, e.VloggerID, map[string]interface{}{
-		"follower_count": w.repo.DB().Raw("SELECT follower_count - 1 FROM accounts WHERE id = ?", e.VloggerID),
-	})
+	if err := w.repo.IncrementFollowerCount(ctx, e.VloggerID, -1); err != nil {
+		log.Printf("failed to decrement follower_count for account %d: %v", e.VloggerID, err)
+		d.Nack(false, true)
+		return
+	}
 
 	// 删除粉丝的冷拉取缓存
 	w.deleteFeedCache(ctx, e.FollowerID)
+
+	d.Ack(false)
 }
 
 func (w *SocialWorker) deleteFeedCache(ctx context.Context, userID uint) {
@@ -373,21 +480,32 @@ func NewPopularityWorker(mq *MQ, rdb *goredis.Client) *PopularityWorker {
 }
 
 func (w *PopularityWorker) Start(ctx context.Context) error {
-	msgs, err := w.mq.Consume("popularity.update.queue")
-	if err != nil {
-		return err
-	}
-
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-msgs:
-				if !ok {
+			default:
+			}
+
+			msgs, err := w.mq.Consume("popularity.update.queue")
+			if err != nil {
+				log.Printf("failed to consume popularity.update.queue: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case d, more := <-msgs:
+					if !more {
+						log.Println("popularity.update.queue channel closed, reopening")
+						break
+					}
+					w.handlePopularityUpdate(ctx, d)
 				}
-				w.handlePopularityUpdate(ctx, d)
 			}
 		}
 	}()
@@ -399,6 +517,7 @@ func (w *PopularityWorker) handlePopularityUpdate(ctx context.Context, d amqp.De
 	e, err := ParsePopularityEvent(d)
 	if err != nil {
 		log.Printf("failed to parse popularity event: %v", err)
+		d.Nack(false, false)
 		return
 	}
 
@@ -412,6 +531,8 @@ func (w *PopularityWorker) handlePopularityUpdate(ctx context.Context, d amqp.De
 	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
+
+	d.Ack(false)
 }
 
 type OutboxWorker struct {
@@ -538,20 +659,32 @@ func NewNotificationWorker(mq *MQ, hub *SSEHub, repo *repository.Repository) *No
 }
 
 func (w *NotificationWorker) Start(ctx context.Context) error {
-	likeMsgs, _ := w.mq.Consume("notification.like.queue")
-	commentMsgs, _ := w.mq.Consume("notification.comment.queue")
-	followMsgs, _ := w.mq.Consume("notification.follow.queue")
-
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-likeMsgs:
-				if !ok {
+			default:
+			}
+
+			msgs, err := w.mq.Consume("notification.like.queue")
+			if err != nil {
+				log.Printf("failed to consume notification.like.queue: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case d, more := <-msgs:
+					if !more {
+						log.Println("notification.like.queue channel closed, reopening")
+						break
+					}
+					w.handleLikeNotification(ctx, d)
 				}
-				w.handleLikeNotification(ctx, d)
 			}
 		}
 	}()
@@ -561,11 +694,27 @@ func (w *NotificationWorker) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-commentMsgs:
-				if !ok {
+			default:
+			}
+
+			msgs, err := w.mq.Consume("notification.comment.queue")
+			if err != nil {
+				log.Printf("failed to consume notification.comment.queue: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case d, more := <-msgs:
+					if !more {
+						log.Println("notification.comment.queue channel closed, reopening")
+						break
+					}
+					w.handleCommentNotification(ctx, d)
 				}
-				w.handleCommentNotification(ctx, d)
 			}
 		}
 	}()
@@ -575,11 +724,27 @@ func (w *NotificationWorker) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
-			case d, ok := <-followMsgs:
-				if !ok {
+			default:
+			}
+
+			msgs, err := w.mq.Consume("notification.follow.queue")
+			if err != nil {
+				log.Printf("failed to consume notification.follow.queue: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				select {
+				case <-ctx.Done():
 					return
+				case d, more := <-msgs:
+					if !more {
+						log.Println("notification.follow.queue channel closed, reopening")
+						break
+					}
+					w.handleFollowNotification(ctx, d)
 				}
-				w.handleFollowNotification(ctx, d)
 			}
 		}
 	}()
