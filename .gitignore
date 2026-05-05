@@ -30,6 +30,8 @@ frontend/dist/
 frontend/dist-ssr/
 frontend/.DS_Store
 frontend/.typescript-cache/
+frontend/src/**/*.js
+frontend/tsconfig.tsbuildinfo
 
 # Uploads
 uploads/
