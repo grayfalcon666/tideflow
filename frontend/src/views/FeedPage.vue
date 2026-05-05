@@ -7,6 +7,7 @@ import VideoPlayer from '../components/video/VideoPlayer.vue'
 import SlideAuthorBar from '../components/feed/SlideAuthorBar.vue'
 import SlideInfoBar from '../components/feed/SlideInfoBar.vue'
 import SlideActionBar from '../components/feed/SlideActionBar.vue'
+import { useVideoControls } from '../composables/useVideoControls'
 import { useFeedStore, type FeedTab } from '../stores/feed'
 import { useAuthStore } from '../stores/auth'
 import { useNotificationStore } from '../stores/notification'
@@ -46,11 +47,23 @@ const onTabChange = (tab: FeedTab) => {
 }
 
 const swiperRef = ref()
+const { isMuted } = useVideoControls((key) => {
+  if (key === 'c' || key === 'C') {
+    showCommentsFor.value = items.value[activeIndex.value]?.video_id ?? null
+  }
+})
 
-watch(activeIndex, () => {
-  if (activeIndex.value >= items.value.length - 3 && hasMore.value && !isLoading.value) {
+watch(activeIndex, (newIdx, oldIdx) => {
+  if (newIdx >= items.value.length - 3 && hasMore.value && !isLoading.value) {
     feedStore.loadMore(activeTab.value)
   }
+  // Pause previous video, play current video
+  if (oldIdx !== undefined && oldIdx !== newIdx) {
+    const prevPlayer = getPlayerAtIndex(oldIdx)
+    prevPlayer?.pause()
+  }
+  const currPlayer = getPlayerAtIndex(newIdx)
+  currPlayer?.play()
 })
 
 onMounted(() => {
@@ -59,16 +72,37 @@ onMounted(() => {
   if (authStore.isLoggedIn) {
     notifStore.connectSSE()
   }
+
+  // Set CSS vars for actual heights of nav elements
+  const tabBar = document.querySelector('.feed-tab-bar') || document.querySelector('[class*="feed-tab-bar"]')
+  const bottomNav = document.querySelector('.bottom-nav')
+  if (tabBar) {
+    document.documentElement.style.setProperty('--tab-bar-height', tabBar.offsetHeight + 'px')
+  }
+  if (bottomNav) {
+    document.documentElement.style.setProperty('--bottom-nav-height', bottomNav.offsetHeight + 'px')
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown)
 })
 
+const getActivePlayer = () => {
+  return getPlayerAtIndex(activeIndex.value)
+}
+
+const getPlayerAtIndex = (idx: number) => {
+  const slides = swiperRef.value?.$el?.querySelectorAll('.feed-slide')
+  const slide = slides?.[idx]
+  return slide?.querySelector('.video-player')?.__vueParentComponent?.exposed as any
+}
+
 // Keyboard shortcuts
 const onKeyDown = (e: KeyboardEvent) => {
   const tag = (e.target as HTMLElement).tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  const player = getActivePlayer()
   switch (e.key) {
     case 'ArrowUp':
     case 'w':
@@ -87,6 +121,16 @@ const onKeyDown = (e: KeyboardEvent) => {
     case 'C':
       showCommentsFor.value = items.value[activeIndex.value]?.video_id ?? null
       break
+    case 'f':
+    case 'F':
+      player?.toggleFullscreen?.()
+      break
+    case 'ArrowLeft':
+      player?.seek?.(-5)
+      break
+    case 'ArrowRight':
+      player?.seek?.(5)
+      break
   }
 }
 </script>
@@ -95,38 +139,34 @@ const onKeyDown = (e: KeyboardEvent) => {
   <div class="feed-page">
     <FeedTabBar :activeTab="activeTab" @update:tab="onTabChange" />
 
-    <FeedSwiper
-      ref="swiperRef"
-      :items="items"
-      :activeIndex="activeIndex"
-      @update:activeIndex="activeIndex = $event"
-      @reachEnd="feedStore.loadMore(activeTab)"
-    >
-      <div
-        v-for="(item, idx) in items"
-        :key="item?.video_id ?? idx"
-        class="feed-slide-wrap"
-        :data-idx="idx"
-        :data-active="idx === activeIndex"
+    <div class="feed-swiper-wrap">
+      <FeedSwiper
+        ref="swiperRef"
+        :items="items"
+        :activeIndex="activeIndex"
+        @update:activeIndex="activeIndex = $event"
+        @reachEnd="feedStore.loadMore(activeTab)"
       >
-        <VideoPlayer
-          :src="item && idx === activeIndex ? item.play_url : ''"
-          :poster="item?.cover_url ?? ''"
-          :muted="true"
-          :autoPlay="idx === activeIndex"
-        />
-        <div class="slide-overlay-author">
-          <SlideAuthorBar :item="item" />
-        </div>
-        <div class="slide-overlay-info">
-          <SlideInfoBar :item="item" />
-        </div>
-        <div class="slide-overlay-actions">
-          <SlideActionBar :item="item" @openComments="showCommentsFor = $event" />
-        </div>
-        <div class="slide-debug">slide {{ idx }} {{ idx === activeIndex ? '(ACTIVE)' : '' }}</div>
-      </div>
-    </FeedSwiper>
+        <template #default="{ item, active }">
+          <VideoPlayer
+            :src="item?.play_url ?? ''"
+            :poster="item?.cover_url ?? ''"
+            :muted="isMuted"
+            :autoPlay="active"
+          />
+          <div class="slide-overlay-author">
+            <SlideAuthorBar :item="item" />
+          </div>
+          <div class="slide-overlay-info">
+            <SlideInfoBar :item="item" />
+          </div>
+          <div class="slide-overlay-actions">
+            <SlideActionBar :item="item" @openComments="showCommentsFor = $event" />
+          </div>
+          <div class="slide-debug">slide {{ item?.video_id }} {{ active ? '(ACTIVE)' : '' }}</div>
+        </template>
+      </FeedSwiper>
+    </div>
   </div>
 </template>
 
@@ -139,10 +179,18 @@ const onKeyDown = (e: KeyboardEvent) => {
   overflow: hidden;
 }
 
-.feed-slide-wrap {
+.feed-tab-bar {
+  flex-shrink: 0;
+}
+
+.feed-swiper-wrap {
+  flex: 1;
+  overflow: hidden;
   position: relative;
-  width: 100%;
-  height: 100%;
+  // On narrow screens the sidebar becomes a bottom nav (fixed), needs padding
+  @media (max-width: 1023px) {
+    padding-bottom: var(--bottom-nav-height);
+  }
 }
 
 .slide-debug {
