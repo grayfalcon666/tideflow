@@ -4,16 +4,10 @@
 
 # Docs and config (generated)
 docs/
+docs
 
 # Claude
 .claude/
-
-# Uploads
-uploads/
-*.mp4
-*.jpg
-*.jpeg
-*.png
 
 # Go
 backend/vendor/
@@ -26,6 +20,21 @@ backend/*.test
 backend/*.out
 backend/tideflow-api
 backend/tideflow-worker
+
+# Frontend
+frontend/node_modules/
+frontend/.quasar/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.DS_Store
+frontend/.typescript-cache/
+
+# Uploads
+uploads/
+*.mp4
+*.jpg
+*.jpeg
+*.png
 
 # IDE
 .idea/
