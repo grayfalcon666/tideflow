@@ -11,6 +11,8 @@ docs
 
 # Go
 backend/vendor/
+backend/worker
+backend/api
 backend/*.exe
 backend/*.exe~
 backend/*.dll

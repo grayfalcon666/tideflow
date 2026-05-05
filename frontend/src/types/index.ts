@@ -57,7 +57,10 @@ export interface VideoAuthor {
 }
 
 export interface VideoItem {
+  id?: number
   video_id: number
+  author_id?: number
+  username?: string
   play_url: string
   cover_url: string
   title: string

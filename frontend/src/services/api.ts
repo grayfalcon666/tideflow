@@ -10,7 +10,7 @@ const api: AxiosInstance = axios.create({
 
 // Request interceptor: attach JWT
 api.interceptors.request.use((config) => {
-  const token = window.__tideflow_access_token__
+  const token = (window as unknown as Record<string, string>).__tideflow_access_token__
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -38,7 +38,7 @@ api.interceptors.response.use(
           const resp = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken })
           const newAccess = resp.data.data?.access_token
           if (newAccess) {
-            window.__tideflow_access_token__ = newAccess
+            (window as unknown as Record<string, string>).__tideflow_access_token__ = newAccess
             // Retry original request
             const config = error.config!
             config.headers.Authorization = `Bearer ${newAccess}`

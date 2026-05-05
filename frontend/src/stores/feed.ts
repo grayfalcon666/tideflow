@@ -75,7 +75,7 @@ export const useFeedStore = defineStore('feed', () => {
       )
       const d = resp.data.data
       if (!d) return
-      const newItems = normalizeVideos(d.items as RawVideoItem[])
+      const newItems = normalizeVideos(d.items as unknown as RawVideoItem[])
       if (reset) {
         latestItems.value = newItems
       } else {
@@ -103,7 +103,7 @@ export const useFeedStore = defineStore('feed', () => {
       )
       const d = resp.data.data
       if (!d) return
-      const newItems = normalizeVideos(d.items as RawVideoItem[])
+      const newItems = normalizeVideos(d.items as unknown as RawVideoItem[])
       if (reset) {
         followingItems.value = newItems
       } else {
@@ -124,7 +124,7 @@ export const useFeedStore = defineStore('feed', () => {
         const resp = await feedService.getLatest(latestCursor.value ?? undefined, 10)
         const d = resp.data.data
         if (!d) return
-        latestItems.value.push(...normalizeVideos(d.items as RawVideoItem[]))
+        latestItems.value.push(...normalizeVideos(d.items as unknown as RawVideoItem[]))
         latestCursor.value = d.next_cursor
         latestHasMore.value = d.has_more ?? false
       } finally {
@@ -137,7 +137,7 @@ export const useFeedStore = defineStore('feed', () => {
         const resp = await feedService.getFollowing(followingCursor.value ?? undefined, 10)
         const d = resp.data.data
         if (!d) return
-        followingItems.value.push(...normalizeVideos(d.items as RawVideoItem[]))
+        followingItems.value.push(...normalizeVideos(d.items as unknown as RawVideoItem[]))
         followingCursor.value = d.next_cursor
         followingHasMore.value = d.has_more ?? false
       } finally {
