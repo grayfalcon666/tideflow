@@ -145,6 +145,19 @@ button {
   background: var(--bg-surface) !important;
 }
 
+.q-menu {
+  background: var(--bg-elevated) !important;
+  color: var(--text-base);
+}
+
+.q-menu .q-item {
+  color: var(--text-base);
+}
+
+.q-menu .q-item:hover {
+  background: var(--bg-card);
+}
+
 .q-item {
   color: var(--text-base);
   min-height: 40px;

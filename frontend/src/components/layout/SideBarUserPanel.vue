@@ -19,6 +19,12 @@ const menuItems = computed(() => [
   { label: '退出登录', action: 'logout' },
 ])
 
+const goToMyProfile = () => {
+  if (myId.value) {
+    router.push(`/u/${myId.value}`)
+  }
+}
+
 const navigate = (item: { route?: string; action?: string }) => {
   showDropdown.value = false
   if (item.action === 'logout') {
@@ -32,18 +38,21 @@ const navigate = (item: { route?: string; action?: string }) => {
 
 <template>
   <div class="user-panel" v-show="!layoutStore.sidebarCollapsed">
-    <q-btn flat no-caps class="user-btn" @click="showDropdown = !showDropdown">
+    <q-btn flat no-caps class="user-btn" @click="goToMyProfile">
       <q-avatar size="32px">
         <img :src="authStore.avatarUrl || '/default-avatar.svg'" />
       </q-avatar>
-      <span v-show="!layoutStore.sidebarCollapsed" class="username">{{ authStore.username || '未登录' }}</span>
-      <TFIcon v-if="!layoutStore.sidebarCollapsed" name="arrow_drop_down" :size="20" />
+      <span class="username">{{ authStore.username || '未登录' }}</span>
+    </q-btn>
+
+    <q-btn flat round dense class="dropdown-trigger" @click.stop="showDropdown = !showDropdown">
+      <TFIcon name="expand_more" :size="20" class="dropdown-icon" :class="{ expanded: showDropdown }" />
     </q-btn>
 
     <q-menu
       v-model="showDropdown"
-      anchor="top middle"
-      self="top right"
+      anchor="top right"
+      self="top left"
       class="user-dropdown"
     >
       <div class="dropdown-user-info">
@@ -73,10 +82,13 @@ const navigate = (item: { route?: string; action?: string }) => {
 <style scoped lang="scss">
 .user-panel {
   padding: var(--space-3) var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
 
 .user-btn {
-  width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -119,5 +131,17 @@ const navigate = (item: { route?: string; action?: string }) => {
 .dropdown-stats {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.dropdown-trigger {
+  color: var(--text-secondary);
+}
+
+.dropdown-icon {
+  transition: transform var(--transition-normal);
+
+  &.expanded {
+    transform: rotate(-90deg);
+  }
 }
 </style>
