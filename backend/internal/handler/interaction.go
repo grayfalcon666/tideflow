@@ -21,7 +21,7 @@ func NewInteractionHandler(interaction *service.InteractionService) *Interaction
 // @Summary 点赞视频
 // @Description 给指定视频点赞，幂等操作
 // @Tags 互动
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "视频ID"
 // @Success 200 {object} response.Response
@@ -47,7 +47,7 @@ func (h *InteractionHandler) LikeVideo(c *gin.Context) {
 // @Summary 取消点赞
 // @Description 取消对指定视频的点赞
 // @Tags 互动
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "视频ID"
 // @Success 200 {object} response.Response
@@ -73,7 +73,7 @@ func (h *InteractionHandler) UnlikeVideo(c *gin.Context) {
 // @Summary 检查是否点赞
 // @Description 检查当前用户是否点赞了指定视频
 // @Tags 互动
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "视频ID"
 // @Success 200 {object} response.Response
@@ -96,7 +96,7 @@ func (h *InteractionHandler) IsLiked(c *gin.Context) {
 // @Summary 我点赞过的视频
 // @Description 获取当前用户点赞过的视频列表
 // @Tags 互动
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param cursor query string false "游标"
 // @Param limit query int false "每页数量" default(20)
@@ -128,7 +128,7 @@ func (h *InteractionHandler) GetLikedVideos(c *gin.Context) {
 // @Summary 发表评论
 // @Description 对视频发表评论或回复
 // @Tags 互动
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept json
 // @Produce json
 // @Param id path int true "视频ID"
@@ -174,7 +174,7 @@ func (h *InteractionHandler) PublishComment(c *gin.Context) {
 // @Summary 删除评论
 // @Description 删除指定评论，仅评论作者可删除
 // @Tags 互动
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "视频ID"
 // @Param comment_id path int true "评论ID"

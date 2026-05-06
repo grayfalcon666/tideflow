@@ -21,7 +21,7 @@ func NewNotificationHandler(notif *service.NotificationService) *NotificationHan
 // @Summary 通知列表
 // @Description 获取当前用户的通知列表
 // @Tags 通知
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param cursor query string false "游标"
 // @Param limit query int false "每页数量" default(20)
@@ -53,7 +53,7 @@ func (h *NotificationHandler) GetNotifications(c *gin.Context) {
 // @Summary 标记通知已读
 // @Description 标记通知为已读，传入IDs只标记指定通知，不传或空数组标记全部
 // @Tags 通知
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept json
 // @Produce json
 // @Param body body MarkReadRequest false "通知ID列表"
@@ -77,7 +77,7 @@ func (h *NotificationHandler) MarkRead(c *gin.Context) {
 // @Summary 未读通知数
 // @Description 获取当前用户未读通知的数量
 // @Tags 通知
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Success 200 {object} response.Response
 // @Failure 401 {object} response.Response

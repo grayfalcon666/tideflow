@@ -97,3 +97,9 @@ func GetUserID(c *gin.Context) uint {
 	}
 	return 0
 }
+
+// GetToken extracts raw token from Authorization header or query param without validation.
+// Used by swagger security hook to pre-fill Bearer token from localStorage.
+func GetToken(c *gin.Context) string {
+	return extractToken(c)
+}

@@ -21,7 +21,7 @@ func NewSSEHandler(hub *mq.SSEHub) *SSEHandler {
 // @Summary SSE实时通知
 // @Description 建立SSE连接，接收实时通知推送
 // @Tags 通知
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce text/event-stream
 // @Param token query string true "访问令牌"
 // @Success 200 {string} string "SSE事件流"

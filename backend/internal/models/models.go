@@ -70,9 +70,13 @@ func (Comment) TableName() string {
 }
 
 type Social struct {
-	ID         uint `gorm:"primaryKey" json:"id"`
-	FollowerID uint `gorm:"index;not null;uniqueIndex:idx_social_follower_vlogger,priority:1" json:"follower_id"`
-	VloggerID  uint `gorm:"index;not null;uniqueIndex:idx_social_follower_vlogger,priority:2" json:"vlogger_id"`
+	ID         uint           `gorm:"primaryKey" json:"id"`
+	FollowerID uint           `gorm:"column:follower_id;not null;uniqueIndex:idx_social_follower_vlogger,priority:1" json:"follower_id"`
+	VloggerID  uint           `gorm:"column:vlogger_id;not null;uniqueIndex:idx_social_follower_vlogger,priority:2" json:"vlogger_id"`
+	Status     int            `gorm:"column:status;not null;default:1" json:"status"` // 1=已关注, 0=未关注
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 }
 
 func (Social) TableName() string {

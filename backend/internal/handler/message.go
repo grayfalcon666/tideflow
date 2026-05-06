@@ -21,7 +21,7 @@ func NewMessageHandler(msg *service.MessageService) *MessageHandler {
 // @Summary 发送私信
 // @Description 向指定用户发送私信
 // @Tags 私信
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept json
 // @Produce json
 // @Param body body SendMessageRequest true "私信内容"
@@ -51,7 +51,7 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 // @Summary 会话列表
 // @Description 获取当前用户的会话列表
 // @Tags 私信
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Success 200 {object} response.Response
 // @Failure 401 {object} response.Response
@@ -69,7 +69,7 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 // @Summary 获取消息记录
 // @Description 获取与指定用户的聊天记录
 // @Tags 私信
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param user_id path int true "用户ID"
 // @Param cursor query string false "游标"
@@ -110,7 +110,7 @@ func (h *MessageHandler) GetMessages(c *gin.Context) {
 // @Summary 标记会话已读
 // @Description 标记与指定用户的会话为已读
 // @Tags 私信
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param user_id path int true "用户ID"
 // @Success 200 {object} response.Response

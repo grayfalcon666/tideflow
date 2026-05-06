@@ -3,10 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
-	"tideflow/internal/models"
 	"tideflow/internal/mq"
 	"tideflow/internal/repository"
 )
@@ -101,44 +101,51 @@ func (s *UserService) IsBigV(ctx context.Context, userID uint) (bool, error) {
 }
 
 func (s *UserService) Follow(ctx context.Context, followerID, vloggerID uint) error {
-	_, err := s.repo.GetSocial(ctx, followerID, vloggerID)
-	if err == nil {
-		return nil
+	// 不能关注自己
+	if followerID == vloggerID {
+		return fmt.Errorf("cannot follow yourself")
 	}
 
-	social := &models.Social{FollowerID: followerID, VloggerID: vloggerID}
-	if err := s.repo.CreateSocial(ctx, social); err != nil {
+	rows, err := s.repo.FollowOrCreate(ctx, followerID, vloggerID)
+	if err != nil {
 		return err
 	}
-
-	// 发布关注事件，SocialWorker 消费：更新粉丝计数 + 失效缓存
-	event := mq.SocialEvent{
-		EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
-		Action:     "follow",
-		FollowerID: followerID,
-		VloggerID:  vloggerID,
-		OccurredAt: time.Now().UnixMilli(),
+	// rows > 0: 状态发生了改变（新关注 或 取消后重新关注），发MQ事件
+	// rows == 0: 已关注且状态没变化，不发MQ事件
+	if rows > 0 {
+		event := mq.SocialEvent{
+			EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
+			Action:     "follow",
+			FollowerID: followerID,
+			VloggerID:  vloggerID,
+			OccurredAt: time.Now().UnixMilli(),
+		}
+		if err := s.mq.Publish(ctx, "social.events", "social.follow", event); err != nil {
+			log.Printf("[Follow] failed to publish event: %v", err)
+		}
 	}
-	s.mq.Publish(ctx, "social.events", "social.follow", event)
-
 	return nil
 }
 
 func (s *UserService) Unfollow(ctx context.Context, followerID, vloggerID uint) error {
-	if err := s.repo.DeleteSocial(ctx, followerID, vloggerID); err != nil {
+	rows, err := s.repo.UnfollowStatus(ctx, followerID, vloggerID)
+	if err != nil {
 		return err
 	}
-
-	// 发布取消关注事件，SocialWorker 消费：更新粉丝计数 + 失效缓存
-	event := mq.SocialEvent{
-		EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
-		Action:     "unfollow",
-		FollowerID: followerID,
-		VloggerID:  vloggerID,
-		OccurredAt: time.Now().UnixMilli(),
+	// rows=1: 真正取关，发MQ事件
+	// rows=0: 本来就没关注，不发MQ事件，直接返回
+	if rows == 1 {
+		event := mq.SocialEvent{
+			EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
+			Action:     "unfollow",
+			FollowerID: followerID,
+			VloggerID:  vloggerID,
+			OccurredAt: time.Now().UnixMilli(),
+		}
+		if err := s.mq.Publish(ctx, "social.events", "social.unfollow", event); err != nil {
+			log.Printf("[Unfollow] failed to publish event: %v", err)
+		}
 	}
-	s.mq.Publish(ctx, "social.events", "social.unfollow", event)
-
 	return nil
 }
 

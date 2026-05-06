@@ -21,7 +21,7 @@ func NewVideoHandler(video *service.VideoService) *VideoHandler {
 // @Summary 上传视频文件
 // @Description 上传视频文件，返回播放URL
 // @Tags 视频
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept multipart/form-data
 // @Produce json
 // @Param file formData file true "视频文件"
@@ -52,7 +52,7 @@ func (h *VideoHandler) UploadVideo(c *gin.Context) {
 // @Summary 上传封面
 // @Description 上传视频封面图片，返回封面URL
 // @Tags 视频
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept multipart/form-data
 // @Produce json
 // @Param file formData file true "封面图片"
@@ -79,7 +79,7 @@ func (h *VideoHandler) UploadCover(c *gin.Context) {
 // @Summary 发布视频
 // @Description 发布一个新视频
 // @Tags 视频
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept json
 // @Produce json
 // @Param body body PublishVideoRequest true "视频信息"
@@ -179,7 +179,7 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 // @Summary 更新视频信息
 // @Description 更新视频的标题、描述、封面或标签
 // @Tags 视频
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept json
 // @Produce json
 // @Param id path int true "视频ID"
@@ -235,7 +235,7 @@ func (h *VideoHandler) UpdateVideo(c *gin.Context) {
 // @Summary 删除视频
 // @Description 软删除视频，仅作者可删除
 // @Tags 视频
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "视频ID"
 // @Success 200 {object} response.Response

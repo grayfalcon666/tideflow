@@ -31,6 +31,15 @@ definitions:
           type: integer
         type: array
     type: object
+  handler.OAuth2TokenResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      token_type:
+        type: string
+    type: object
   handler.PublishCommentRequest:
     properties:
       content:
@@ -150,6 +159,10 @@ definitions:
     type: object
 info:
   contact: {}
+  description: 高性能短视频 Feed 流系统 API 文档
+  termsOfService: http://swagger.io/terms/
+  title: TideFlow 短视频 Feed 流 API
+  version: v1
 paths:
   /api/v1/auth/login:
     post:
@@ -196,8 +209,42 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 用户登出
+      tags:
+      - 认证
+  /api/v1/auth/oauth2/token:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: Swagger UI登录专用端点，使用username/password换取access_token
+      parameters:
+      - description: 用户名
+        in: formData
+        name: username
+        required: true
+        type: string
+      - description: 密码
+        in: formData
+        name: password
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.OAuth2TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: OAuth2 Token (Swagger专用)
       tags:
       - 认证
   /api/v1/auth/password:
@@ -311,7 +358,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 关注流
       tags:
       - 时间线
@@ -424,7 +471,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 我点赞过的视频
       tags:
       - 互动
@@ -456,7 +503,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 发送私信
       tags:
       - 私信
@@ -475,7 +522,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 会话列表
       tags:
       - 私信
@@ -513,7 +560,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 获取消息记录
       tags:
       - 私信
@@ -542,7 +589,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 标记会话已读
       tags:
       - 私信
@@ -571,7 +618,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 通知列表
       tags:
       - 通知
@@ -598,7 +645,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 标记通知已读
       tags:
       - 通知
@@ -623,7 +670,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: SSE实时通知
       tags:
       - 通知
@@ -642,7 +689,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 未读通知数
       tags:
       - 通知
@@ -716,7 +763,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 获取粉丝列表
       tags:
       - 社交关系
@@ -754,7 +801,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 获取关注列表
       tags:
       - 社交关系
@@ -783,7 +830,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 获取社交数量
       tags:
       - 社交关系
@@ -821,7 +868,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 获取用户视频列表
       tags:
       - 用户资料
@@ -850,7 +897,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 取消关注
       tags:
       - 社交关系
@@ -878,7 +925,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 关注用户
       tags:
       - 社交关系
@@ -897,7 +944,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 获取当前用户信息
       tags:
       - 用户资料
@@ -928,7 +975,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 更新个人资料
       tags:
       - 用户资料
@@ -964,7 +1011,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 修改用户名
       tags:
       - 用户资料
@@ -1019,7 +1066,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 发布视频
       tags:
       - 视频
@@ -1052,7 +1099,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 删除视频
       tags:
       - 视频
@@ -1118,7 +1165,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 更新视频信息
       tags:
       - 视频
@@ -1190,7 +1237,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 发表评论
       tags:
       - 互动
@@ -1224,7 +1271,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 删除评论
       tags:
       - 互动
@@ -1253,7 +1300,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 取消点赞
       tags:
       - 互动
@@ -1281,7 +1328,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 检查是否点赞
       tags:
       - 互动
@@ -1309,7 +1356,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 点赞视频
       tags:
       - 互动
@@ -1340,7 +1387,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 上传封面
       tags:
       - 视频
@@ -1371,8 +1418,16 @@ paths:
           schema:
             $ref: '#/definitions/response.Response'
       security:
-      - BearerAuth: []
+      - OAuth2Password: []
       summary: 上传视频文件
       tags:
       - 视频
+securityDefinitions:
+  OAuth2Password:
+    flow: password
+    scopes:
+      read: Grant read access
+      write: Grant write access
+    tokenUrl: /api/v1/auth/oauth2/token
+    type: oauth2
 swagger: "2.0"

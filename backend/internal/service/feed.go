@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"sync"
@@ -72,23 +73,46 @@ func (s *FeedService) ListPopular(ctx context.Context, offset, limit int, window
 	ts := now.Format("200601021504")
 
 	mergeKey := infraredis.HotMerge(window, ts)
+	log.Printf("feed: ====== ListPopular 开始 ======")
+	log.Printf("feed: window=%s, ts=%s, mergeKey=%s", window, ts, mergeKey)
 
 	count, _ := s.rdb.ZCard(ctx, mergeKey).Result()
+	log.Printf("feed: ZCard mergeKey=%s, count=%d (count>0说明缓存已存在)", mergeKey, count)
+
 	if count == 0 {
 		minutes := windowToMinutes(window)
+		log.Printf("feed: 缓存不存在，开始构建。minutes=%d", minutes)
+
 		keys := make([]string, minutes)
+		nonEmptyKeys := 0
 		for i := 0; i < minutes; i++ {
 			t, _ := time.Parse("200601021504", ts)
 			t = t.Add(-time.Duration(i) * time.Minute)
-			keys[i] = infraredis.HotVideo(window, t.Format("200601021504"))
+			keyStr := infraredis.HotVideo("1m", t.Format("200601021504"))  // 固定1m，Worker写入的粒度
+			keys[i] = keyStr
+
+			n, _ := s.rdb.ZCard(ctx, keyStr).Result()
+			log.Printf("feed:   源key[%d]=%s, 元素数=%d", i, keyStr, n)
+			if n > 0 {
+				nonEmptyKeys++
+			}
 		}
-		s.rdb.ZUnionStore(ctx, mergeKey, &goredis.ZStore{Keys: keys})
+		log.Printf("feed: 源key总数=%d, 有数据的key数=%d", minutes, nonEmptyKeys)
+
+		n, err := s.rdb.ZUnionStore(ctx, mergeKey, &goredis.ZStore{Keys: keys}).Result()
 		s.rdb.Expire(ctx, mergeKey, 2*time.Minute)
+		log.Printf("feed: ZUNIONSTORE完成, 结果元素数=%d, err=%v", n, err)
+		count = n
 	}
 
+	log.Printf("feed: ZREVRANGE mergeKey=%s, offset=%d, limit=%d", mergeKey, offset, limit)
 	idStrs, err := s.rdb.ZRevRange(ctx, mergeKey, int64(offset), int64(offset+limit-1)).Result()
+	log.Printf("feed: ZREVRANGE结果, len(idStrs)=%d, err=%v", len(idStrs), err)
+
 	if err != nil || len(idStrs) == 0 {
+		log.Printf("feed: Redis热门ID为空，降级MySQL, len(idStrs)=%d", len(idStrs))
 		videos, err := s.repo.GetPopularVideos(ctx, offset, limit+1)
+		log.Printf("feed: MySQL结果, len(videos)=%d, err=%v", len(videos), err)
 		if err != nil {
 			return nil, nil, false, err
 		}
@@ -110,6 +134,7 @@ func (s *FeedService) ListPopular(ctx context.Context, offset, limit int, window
 		videoIDs[i] = uint(id)
 	}
 
+	log.Printf("feed: ListPopular Redis热门ID命中, ids=%v, 继续查缓存", videoIDs)
 	videos, err := s.cache.GetVideoByIDs(ctx, videoIDs)
 	if err != nil {
 		return nil, nil, false, err

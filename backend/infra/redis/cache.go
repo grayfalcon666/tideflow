@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -70,6 +71,7 @@ func (c *Cache) GetVideoEntity(ctx context.Context, id uint) (*models.Video, err
 	// L1
 	if v, ok := c.local.Get(key); ok {
 		if video, ok := v.(*models.Video); ok {
+			slog.Info("cache: L1命中", "key", key, "id", id)
 			return video, nil
 		}
 	}
@@ -80,6 +82,7 @@ func (c *Cache) GetVideoEntity(ctx context.Context, id uint) (*models.Video, err
 		var video models.Video
 		if json.Unmarshal([]byte(v), &video) == nil {
 			c.local.Set(key, &video, L1TTL)
+			slog.Info("cache: L2命中", "key", key, "id", id)
 			return &video, nil
 		}
 	}
@@ -92,6 +95,7 @@ func (c *Cache) GetVideoEntity(ctx context.Context, id uint) (*models.Video, err
 			data, _ := json.Marshal(dbVideo)
 			c.rdb.Set(ctx, key, data, L2TTL)
 			c.local.Set(key, dbVideo, L1TTL)
+			slog.Info("cache: 未命中，回源MySQL", "key", key, "id", id)
 			return dbVideo, nil
 		}
 		return nil, dbErr
@@ -109,15 +113,18 @@ func (c *Cache) GetVideoByIDs(ctx context.Context, ids []uint) ([]*models.Video,
 	var missedIdx []int
 
 	// L1 批量查询，统一使用 VideoEntity(id) 作为键
+	l1HitCount := 0
 	for i, id := range ids {
 		if v, ok := c.local.Get(VideoEntity(id)); ok {
 			if video, ok := v.(*models.Video); ok {
 				results[i] = video
+				l1HitCount++
 				continue
 			}
 		}
 		missedIdx = append(missedIdx, i)
 	}
+	slog.Info("cache: 批量L1查询", "total", len(ids), "l1_hits", l1HitCount)
 
 	if len(missedIdx) == 0 {
 		return results, nil
@@ -171,6 +178,7 @@ func (c *Cache) GetVideoByIDs(ctx context.Context, ids []uint) ([]*models.Video,
 		if err != nil {
 			return nil, err
 		}
+		l2HitCount := 0
 		// 回写 L1（统一 key）
 		for i, v := range vals {
 			if v == nil {
@@ -181,8 +189,10 @@ func (c *Cache) GetVideoByIDs(ctx context.Context, ids []uint) ([]*models.Video,
 				c.local.Set(VideoEntity(missedIDs[i]), &video, L1TTL)
 				// 标记 results 为命中
 				results[missedIdx[i]] = &video
+				l2HitCount++
 			}
 		}
+		slog.Info("cache: 批量L2查询", "total", len(missedIDs), "l2_hits", l2HitCount)
 		return vals, nil
 	})
 
@@ -238,6 +248,7 @@ func (c *Cache) GetVideoDetail(ctx context.Context, id uint, dbQuery func(contex
 	// L1
 	if v, ok := c.local.Get(key); ok {
 		if video, ok := v.(*models.Video); ok {
+			slog.Info("cache: GetVideoDetail L1命中", "key", key, "id", id)
 			return video, nil
 		}
 	}
@@ -248,6 +259,7 @@ func (c *Cache) GetVideoDetail(ctx context.Context, id uint, dbQuery func(contex
 		var video models.Video
 		if json.Unmarshal([]byte(v), &video) == nil {
 			c.local.Set(key, &video, L1TTL)
+			slog.Info("cache: GetVideoDetail L2命中", "key", key, "id", id)
 			return &video, nil
 		}
 	}
@@ -417,6 +429,7 @@ func (c *Cache) loadFromDB(ctx context.Context, ids []uint, results []*models.Vi
 		return results, fmt.Errorf("repository not set")
 	}
 
+	slog.Info("cache: 批量回源MySQL", "ids", ids)
 	dbVideos, err := c.repo.GetVideosByIDs(ctx, ids)
 	if err != nil {
 		return results, err

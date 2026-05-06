@@ -116,8 +116,9 @@ func (r *Repository) IncrementLikesCount(ctx context.Context, id uint, delta int
 }
 
 func (r *Repository) IncrementFollowerCount(ctx context.Context, id uint, delta int64) error {
+	// Use GREATEST to prevent follower_count from going negative
 	return r.db.WithContext(ctx).Exec(
-		"UPDATE accounts SET follower_count = follower_count + ? WHERE id = ?",
+		"UPDATE accounts SET follower_count = GREATEST(follower_count + ?, 0) WHERE id = ?",
 		delta, id,
 	).Error
 }
@@ -212,10 +213,46 @@ func (r *Repository) SoftDeleteComment(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Model(&models.Comment{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
 }
 
-func (r *Repository) CreateSocial(ctx context.Context, social *models.Social) error {
-	return r.db.WithContext(ctx).Create(social).Error
+// FollowOrCreate inserts or updates a follow relationship.
+// Uses INSERT ... ON DUPLICATE KEY UPDATE status=1.
+// Returns (affectedRows, error). affectedRows=1 means new insert, =2 means already existed and was updated.
+// 如果记录已存在且status=1，affectedRows=2，此时不需要发MQ事件。
+func (r *Repository) FollowOrCreate(ctx context.Context, followerID, vloggerID uint) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(
+		"INSERT INTO socials (follower_id, vlogger_id, status, created_at, updated_at) VALUES (?, ?, 1, NOW(), NOW()) "+
+			"ON DUPLICATE KEY UPDATE status = 1, updated_at = NOW()",
+		followerID, vloggerID,
+	)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
 }
 
+// UnfollowStatus sets status=0 for an active follow relationship.
+// Returns (rows, error). rows=1 means actually unfollowed (发MQ)，=0 means was not following (不发MQ)。
+func (r *Repository) UnfollowStatus(ctx context.Context, followerID, vloggerID uint) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(
+		"UPDATE socials SET status = 0, updated_at = NOW() WHERE follower_id = ? AND vlogger_id = ? AND status = 1",
+		followerID, vloggerID,
+	)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
+
+// GetActiveSocial returns the social record only if status=1 (active follow). Used by Worker for idempotency.
+func (r *Repository) GetActiveSocial(ctx context.Context, followerID, vloggerID uint) (*models.Social, error) {
+	var social models.Social
+	err := r.db.WithContext(ctx).Where("follower_id = ? AND vlogger_id = ? AND status = 1", followerID, vloggerID).First(&social).Error
+	if err != nil {
+		return nil, err
+	}
+	return &social, nil
+}
+
+// GetSocial returns the social record regardless of status.
 func (r *Repository) GetSocial(ctx context.Context, followerID, vloggerID uint) (*models.Social, error) {
 	var social models.Social
 	err := r.db.WithContext(ctx).Where("follower_id = ? AND vlogger_id = ?", followerID, vloggerID).First(&social).Error
@@ -225,13 +262,14 @@ func (r *Repository) GetSocial(ctx context.Context, followerID, vloggerID uint) 
 	return &social, nil
 }
 
+// DeleteSocial is kept for migration compatibility but does not publish MQ events.
 func (r *Repository) DeleteSocial(ctx context.Context, followerID, vloggerID uint) error {
 	return r.db.WithContext(ctx).Where("follower_id = ? AND vlogger_id = ?", followerID, vloggerID).Delete(&models.Social{}).Error
 }
 
 func (r *Repository) GetFollowingIDs(ctx context.Context, followerID uint) ([]uint, error) {
 	var socials []models.Social
-	err := r.db.WithContext(ctx).Where("follower_id = ?", followerID).Find(&socials).Error
+	err := r.db.WithContext(ctx).Where("follower_id = ? AND status = 1", followerID).Find(&socials).Error
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +282,7 @@ func (r *Repository) GetFollowingIDs(ctx context.Context, followerID uint) ([]ui
 
 func (r *Repository) GetFollowerIDs(ctx context.Context, vloggerID uint) ([]uint, error) {
 	var socials []models.Social
-	err := r.db.WithContext(ctx).Where("vlogger_id = ?", vloggerID).Find(&socials).Error
+	err := r.db.WithContext(ctx).Where("vlogger_id = ? AND status = 1", vloggerID).Find(&socials).Error
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +295,7 @@ func (r *Repository) GetFollowerIDs(ctx context.Context, vloggerID uint) ([]uint
 
 func (r *Repository) GetFollowing(ctx context.Context, followerID uint, before time.Time, limit int) ([]*models.Account, error) {
 	var accounts []*models.Account
-	subQuery := r.db.WithContext(ctx).Table("socials").Select("vlogger_id").Where("follower_id = ?", followerID)
+	subQuery := r.db.WithContext(ctx).Table("socials").Select("vlogger_id").Where("follower_id = ? AND status = 1", followerID)
 	query := r.db.WithContext(ctx).Table("accounts").Where("id IN ?", subQuery)
 	if !before.IsZero() {
 		query = query.Where("created_at < ?", before)
@@ -268,7 +306,7 @@ func (r *Repository) GetFollowing(ctx context.Context, followerID uint, before t
 
 func (r *Repository) GetFollowers(ctx context.Context, vloggerID uint, before time.Time, limit int) ([]*models.Account, error) {
 	var accounts []*models.Account
-	subQuery := r.db.WithContext(ctx).Table("socials").Select("follower_id").Where("vlogger_id = ?", vloggerID)
+	subQuery := r.db.WithContext(ctx).Table("socials").Select("follower_id").Where("vlogger_id = ? AND status = 1", vloggerID)
 	query := r.db.WithContext(ctx).Table("accounts").Where("id IN ?", subQuery)
 	if !before.IsZero() {
 		query = query.Where("created_at < ?", before)
@@ -279,13 +317,13 @@ func (r *Repository) GetFollowers(ctx context.Context, vloggerID uint, before ti
 
 func (r *Repository) CountFollowing(ctx context.Context, followerID uint) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&models.Social{}).Where("follower_id = ?", followerID).Count(&count).Error
+	err := r.db.WithContext(ctx).Model(&models.Social{}).Where("follower_id = ? AND status = 1", followerID).Count(&count).Error
 	return count, err
 }
 
 func (r *Repository) CountFollowers(ctx context.Context, vloggerID uint) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&models.Social{}).Where("vlogger_id = ?", vloggerID).Count(&count).Error
+	err := r.db.WithContext(ctx).Model(&models.Social{}).Where("vlogger_id = ? AND status = 1", vloggerID).Count(&count).Error
 	return count, err
 }
 
@@ -311,11 +349,17 @@ func (r *Repository) MarkMessagesRead(ctx context.Context, fromID, toID uint) er
 
 func (r *Repository) GetConversations(ctx context.Context, userID uint) ([]*models.Message, error) {
 	var msgs []*models.Message
-	subQuery := r.db.WithContext(ctx).Table("messages").
-		Select("MAX(id) as id").
-		Where("deleted_at IS NULL AND (from_id = ? OR to_id = ?)", userID, userID).
-		Group("LEAST(from_id, to_id), GREATEST(from_id, to_id)")
-	err := r.db.WithContext(ctx).Where("id IN ?", subQuery).Order("created_at DESC").Find(&msgs).Error
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT m.*
+		FROM messages m
+		INNER JOIN (
+			SELECT MAX(id) as id
+			FROM messages
+			WHERE deleted_at IS NULL AND (from_id = ? OR to_id = ?)
+			GROUP BY LEAST(from_id, to_id), GREATEST(from_id, to_id)
+		) latest ON m.id = latest.id
+		ORDER BY m.created_at DESC
+	`, userID, userID).Scan(&msgs).Error
 	return msgs, err
 }
 
@@ -464,7 +508,7 @@ func (r *Repository) GetFollowersWithCursor(ctx context.Context, vloggerID uint,
 
 	var followerIDs []uint
 	err := r.db.WithContext(ctx).Model(&models.Social{}).
-		Where("vlogger_id = ?", vloggerID).
+		Where("vlogger_id = ? AND status = 1", vloggerID).
 		Pluck("follower_id", &followerIDs).Error
 	if err != nil {
 		return nil, err

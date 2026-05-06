@@ -60,6 +60,7 @@ func (w *TimelineWorker) consumeWithRetry(ctx context.Context, queue string, han
 					log.Printf("%s channel closed, reopening", queue)
 					break
 				}
+				log.Printf("[worker] received message on queue=%s body=%s", queue, string(d.Body))
 				handler(ctx, d)
 			}
 		}
@@ -372,6 +373,7 @@ func NewSocialWorker(mq *MQ, rdb *goredis.Client, repo *repository.Repository, b
 }
 
 func (w *SocialWorker) consumeWithRetry(ctx context.Context, queue string, handler func(context.Context, amqp.Delivery)) {
+	log.Printf("[worker] consuming queue: %s", queue)
 	for {
 		select {
 		case <-ctx.Done():
@@ -405,6 +407,7 @@ func (w *SocialWorker) consumeWithRetry(ctx context.Context, queue string, handl
 					log.Printf("%s channel closed, reopening", queue)
 					break
 				}
+				log.Printf("[worker] received message on queue=%s body=%s", queue, string(d.Body))
 				handler(ctx, d)
 			}
 		}
@@ -425,12 +428,37 @@ func (w *SocialWorker) handleFollow(ctx context.Context, d amqp.Delivery) {
 		return
 	}
 
+	// 幂等校验：Redis SETNX event key，10min TTL，防止重复消费
+	eventKey := "event:processed:" + e.EventID
+	set, err := w.rdb.SetNX(ctx, eventKey, "1", 10*time.Minute).Result()
+	if err != nil {
+		log.Printf("failed to set idempotency key: %v", err)
+		d.Nack(false, true)
+		return
+	}
+	if !set {
+		// 已有处理记录，直接Ack不重复处理
+		d.Ack(false)
+		return
+	}
+
+	// 再次确认DB中关系确实存在且status=1（双重保险）
+	_, err = w.repo.GetActiveSocial(ctx, e.FollowerID, e.VloggerID)
+	if err != nil {
+		log.Printf("social relation not active, skip: %v", err)
+		d.Ack(false)
+		return
+	}
+
 	// 更新博主粉丝计数（+1）
 	if err := w.repo.IncrementFollowerCount(ctx, e.VloggerID, 1); err != nil {
 		log.Printf("failed to increment follower_count for account %d: %v", e.VloggerID, err)
 		d.Nack(false, true)
 		return
 	}
+
+	acc, _ := w.repo.GetAccountByID(ctx, e.VloggerID)
+	log.Printf("[follow] vlogger_id=%d follower_count=%d", e.VloggerID, acc.FollowerCount)
 
 	// 删除粉丝的冷拉取缓存
 	w.deleteFeedCache(ctx, e.FollowerID)
@@ -449,12 +477,29 @@ func (w *SocialWorker) handleUnfollow(ctx context.Context, d amqp.Delivery) {
 		return
 	}
 
-	// 更新博主粉丝计数（-1）
+	// 幂等校验：Redis SETNX event key，10min TTL，防止重复消费
+	eventKey := "event:processed:" + e.EventID
+	set, err := w.rdb.SetNX(ctx, eventKey, "1", 10*time.Minute).Result()
+	if err != nil {
+		log.Printf("failed to set idempotency key: %v", err)
+		d.Nack(false, true)
+		return
+	}
+	if !set {
+		// 已有处理记录，直接Ack不重复处理
+		d.Ack(false)
+		return
+	}
+
+	// 更新博主粉丝计数（-1），SQL层已有 GREATEST 保护，不会变负
 	if err := w.repo.IncrementFollowerCount(ctx, e.VloggerID, -1); err != nil {
 		log.Printf("failed to decrement follower_count for account %d: %v", e.VloggerID, err)
 		d.Nack(false, true)
 		return
 	}
+
+	acc, _ := w.repo.GetAccountByID(ctx, e.VloggerID)
+	log.Printf("[unfollow] vlogger_id=%d follower_count=%d", e.VloggerID, acc.FollowerCount)
 
 	// 删除粉丝的冷拉取缓存
 	w.deleteFeedCache(ctx, e.FollowerID)

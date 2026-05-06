@@ -96,7 +96,7 @@ func (h *FeedHandler) ListPopular(c *gin.Context) {
 // @Summary 关注流
 // @Description 获取当前用户关注的人的发布视频
 // @Tags 时间线
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param cursor query string false "游标"
 // @Param limit query int false "每页数量" default(20)

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -155,10 +156,50 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	response.Success(c, nil)
 }
 
+// OAuth2Token handles password grant for Swagger UI login
+// @Summary OAuth2 Token (Swagger专用)
+// @Description Swagger UI登录专用端点，使用username/password换取access_token
+// @Tags 认证
+// @Accept application/x-www-form-urlencoded
+// @Produce json
+// @Param username formData string true "用户名"
+// @Param password formData string true "密码"
+// @Success 200 {object} OAuth2TokenResponse
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Router /api/v1/auth/oauth2/token [post]
+func (h *AuthHandler) OAuth2Token(c *gin.Context) {
+	username := c.PostForm("username")
+	password := c.PostForm("password")
+
+	if username == "" || password == "" {
+		response.BadRequest(c, "username and password are required")
+		return
+	}
+
+	tokens, _, err := h.auth.Login(c.Request.Context(), username, password)
+	if err != nil {
+		response.Unauthorized(c)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": tokens.AccessToken,
+		"token_type":   "Bearer",
+		"expires_in":   tokens.ExpiresIn,
+	})
+}
+
+type OAuth2TokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
 // @Summary 用户登出
 // @Description 使当前access_token失效
 // @Tags 认证
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Success 200 {object} response.Response
 // @Failure 401 {object} response.Response
@@ -183,7 +224,7 @@ func NewUserHandler(repo *service.UserService) *UserHandler {
 // @Summary 获取当前用户信息
 // @Description 获取已登录用户的信息
 // @Tags 用户资料
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Success 200 {object} response.Response
 // @Failure 401 {object} response.Response
@@ -242,7 +283,7 @@ func (h *UserHandler) GetUserByUsername(c *gin.Context) {
 // @Summary 更新个人资料
 // @Description 更新当前用户的头像和简介
 // @Tags 用户资料
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept json
 // @Produce json
 // @Param body body UpdateProfileRequest true "更新信息"
@@ -279,7 +320,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 // @Summary 修改用户名
 // @Description 修改当前用户的用户名
 // @Tags 用户资料
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Accept json
 // @Produce json
 // @Param body body UpdateUsernameRequest true "新用户名"
@@ -312,7 +353,7 @@ func (h *UserHandler) UpdateUsername(c *gin.Context) {
 // @Summary 关注用户
 // @Description 当前用户关注指定用户
 // @Tags 社交关系
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param user_id path int true "目标用户ID"
 // @Success 200 {object} response.Response
@@ -338,7 +379,7 @@ func (h *UserHandler) Follow(c *gin.Context) {
 // @Summary 取消关注
 // @Description 当前用户取消关注指定用户
 // @Tags 社交关系
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param user_id path int true "目标用户ID"
 // @Success 200 {object} response.Response
@@ -364,7 +405,7 @@ func (h *UserHandler) Unfollow(c *gin.Context) {
 // @Summary 获取关注列表
 // @Description 获取指定用户的关注列表
 // @Tags 社交关系
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "用户ID"
 // @Param cursor query string false "游标"
@@ -404,7 +445,7 @@ func (h *UserHandler) GetFollowing(c *gin.Context) {
 // @Summary 获取粉丝列表
 // @Description 获取指定用户的粉丝列表
 // @Tags 社交关系
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "用户ID"
 // @Param cursor query string false "游标"
@@ -444,7 +485,7 @@ func (h *UserHandler) GetFollowers(c *gin.Context) {
 // @Summary 获取社交数量
 // @Description 获取指定用户的关注数和粉丝数
 // @Tags 社交关系
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "用户ID"
 // @Success 200 {object} response.Response
@@ -471,7 +512,7 @@ func (h *UserHandler) GetSocialCounts(c *gin.Context) {
 // @Summary 获取用户视频列表
 // @Description 获取指定用户发布的视频列表
 // @Tags 用户资料
-// @Security BearerAuth
+// @Security OAuth2Password
 // @Produce json
 // @Param id path int true "用户ID"
 // @Param cursor query string false "游标"

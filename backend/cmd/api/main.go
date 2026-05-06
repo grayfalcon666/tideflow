@@ -1,3 +1,18 @@
+// TideFlow API
+//
+// @title TideFlow 短视频 Feed 流 API
+// @version v1
+// @description 高性能短视频 Feed 流系统 API 文档
+// @termsOfService http://swagger.io/terms/
+//
+// @securityDefinitions.oauth2.password OAuth2Password
+// @tokenUrl /api/v1/auth/oauth2/token
+// @scope.read Grant read access
+// @scope.write Grant write access
+//
+// @host localhost:8080
+// @BasePath /
+// @schemes http https
 package main
 
 import (
@@ -9,6 +24,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/swaggo/files"
@@ -135,6 +151,13 @@ func setupRouter(
 	cfg *config.Config,
 ) *gin.Engine {
 	r := gin.Default()
+	r.Use(cors.New(cors.Config{
+		AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 
 	// 静态文件：视频和封面
 	r.Static("/videos", cfg.Upload.Dir+"/videos")
@@ -142,6 +165,7 @@ func setupRouter(
 
 	r.POST("/api/v1/auth/register", rateLimitMw.RegisterLimit(), authHandler.Register)
 	r.POST("/api/v1/auth/login", rateLimitMw.LoginLimit(), authHandler.Login)
+	r.POST("/api/v1/auth/oauth2/token", authHandler.OAuth2Token)
 	r.POST("/api/v1/auth/refresh", authHandler.Refresh)
 	r.POST("/api/v1/auth/password", authHandler.ChangePassword)
 	r.POST("/api/v1/auth/logout", authMw.JWTAuth(), authHandler.Logout)
@@ -191,7 +215,9 @@ func setupRouter(
 
 	r.GET("/api/v1/tags/hot", tagHandler.GetHotTags)
 
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
+		ginSwagger.PersistAuthorization(true),
+	))
 
 	return r
 }
