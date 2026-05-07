@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -370,7 +372,13 @@ func (h *UserHandler) Follow(c *gin.Context) {
 	}
 
 	if err := h.repo.Follow(c.Request.Context(), userID, uint(targetID)); err != nil {
-		response.InternalServerError(c, err.Error())
+		if errors.Is(err, service.ErrAlreadyFollowing) {
+			response.Conflict(c, err.Error())
+		} else if strings.Contains(err.Error(), "not found") {
+			response.NotFound(c, err.Error())
+		} else {
+			response.InternalServerError(c, err.Error())
+		}
 		return
 	}
 	response.Success(c, nil)
@@ -396,7 +404,13 @@ func (h *UserHandler) Unfollow(c *gin.Context) {
 	}
 
 	if err := h.repo.Unfollow(c.Request.Context(), userID, uint(targetID)); err != nil {
-		response.InternalServerError(c, err.Error())
+		if errors.Is(err, service.ErrNotFollowing) {
+			response.Conflict(c, err.Error())
+		} else if strings.Contains(err.Error(), "not found") {
+			response.NotFound(c, err.Error())
+		} else {
+			response.InternalServerError(c, err.Error())
+		}
 		return
 	}
 	response.Success(c, nil)

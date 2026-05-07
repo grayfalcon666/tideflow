@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -9,6 +10,11 @@ import (
 
 	"tideflow/internal/mq"
 	"tideflow/internal/repository"
+)
+
+var (
+	ErrAlreadyFollowing = errors.New("already following")
+	ErrNotFollowing    = errors.New("not following")
 )
 
 type UserService struct {
@@ -106,45 +112,56 @@ func (s *UserService) Follow(ctx context.Context, followerID, vloggerID uint) er
 		return fmt.Errorf("cannot follow yourself")
 	}
 
+	// 检查目标用户是否存在
+	if _, err := s.repo.GetAccountByID(ctx, vloggerID); err != nil {
+		return fmt.Errorf("user %d not found", vloggerID)
+	}
+
 	rows, err := s.repo.FollowOrCreate(ctx, followerID, vloggerID)
 	if err != nil {
 		return err
 	}
 	// rows > 0: 状态发生了改变（新关注 或 取消后重新关注），发MQ事件
-	// rows == 0: 已关注且状态没变化，不发MQ事件
-	if rows > 0 {
-		event := mq.SocialEvent{
-			EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
-			Action:     "follow",
-			FollowerID: followerID,
-			VloggerID:  vloggerID,
-			OccurredAt: time.Now().UnixMilli(),
-		}
-		if err := s.mq.Publish(ctx, "social.events", "social.follow", event); err != nil {
-			log.Printf("[Follow] failed to publish event: %v", err)
-		}
+	// rows == 0: 已关注且状态没变化，返回错误
+	if rows == 0 {
+		return ErrAlreadyFollowing
+	}
+	event := mq.SocialEvent{
+		EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
+		Action:     "follow",
+		FollowerID: followerID,
+		VloggerID:  vloggerID,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	if err := s.mq.Publish(ctx, "social.events", "social.follow", event); err != nil {
+		log.Printf("[Follow] failed to publish event: %v", err)
 	}
 	return nil
 }
 
 func (s *UserService) Unfollow(ctx context.Context, followerID, vloggerID uint) error {
+	// 检查目标用户是否存在
+	if _, err := s.repo.GetAccountByID(ctx, vloggerID); err != nil {
+		return fmt.Errorf("user %d not found", vloggerID)
+	}
 	rows, err := s.repo.UnfollowStatus(ctx, followerID, vloggerID)
 	if err != nil {
 		return err
 	}
 	// rows=1: 真正取关，发MQ事件
-	// rows=0: 本来就没关注，不发MQ事件，直接返回
-	if rows == 1 {
-		event := mq.SocialEvent{
-			EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
-			Action:     "unfollow",
-			FollowerID: followerID,
-			VloggerID:  vloggerID,
-			OccurredAt: time.Now().UnixMilli(),
-		}
-		if err := s.mq.Publish(ctx, "social.events", "social.unfollow", event); err != nil {
-			log.Printf("[Unfollow] failed to publish event: %v", err)
-		}
+	// rows=0: 本来就没关注，返回错误
+	if rows == 0 {
+		return ErrNotFollowing
+	}
+	event := mq.SocialEvent{
+		EventID:    fmt.Sprintf("%d-%d-%d", followerID, vloggerID, time.Now().UnixNano()),
+		Action:     "unfollow",
+		FollowerID: followerID,
+		VloggerID:  vloggerID,
+		OccurredAt: time.Now().UnixMilli(),
+	}
+	if err := s.mq.Publish(ctx, "social.events", "social.unfollow", event); err != nil {
+		log.Printf("[Unfollow] failed to publish event: %v", err)
 	}
 	return nil
 }

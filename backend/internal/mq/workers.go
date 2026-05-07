@@ -80,14 +80,20 @@ func (w *TimelineWorker) handleVideoPublish(ctx context.Context, d amqp.Delivery
 		return
 	}
 
-	// 1. 写全局时间线
+	// 1. 写全局时间线（保留 1000 条）
 	w.rdb.ZAdd(ctx, redis.FeedGlobal(), goredis.Z{Score: float64(e.CreateTime), Member: e.VideoID})
-	w.rdb.ZRemRangeByRank(ctx, redis.FeedGlobal(), 0, -1001)
+	n, _ := w.rdb.ZCard(ctx, redis.FeedGlobal()).Result()
+	if n > 1000 {
+		w.rdb.ZRemRangeByRank(ctx, redis.FeedGlobal(), 0, int64(n-1000-1))
+	}
 
-	// 2. 写作者发件箱
+	// 2. 写作者发件箱（保留 5000 条）
 	outboxKey := redis.Outbox(e.AuthorID)
 	w.rdb.ZAdd(ctx, outboxKey, goredis.Z{Score: float64(e.CreateTime), Member: e.VideoID})
-	w.rdb.ZRemRangeByRank(ctx, outboxKey, 0, -5001)
+	on, _ := w.rdb.ZCard(ctx, outboxKey).Result()
+	if on > 5000 {
+		w.rdb.ZRemRangeByRank(ctx, outboxKey, 0, int64(on-5000-1))
+	}
 
 	// 3. 大V判定：查询作者粉丝数
 	acc, err := w.repo.GetAccountByID(ctx, e.AuthorID)
@@ -102,7 +108,7 @@ func (w *TimelineWorker) handleVideoPublish(ctx context.Context, d amqp.Delivery
 		return
 	}
 
-	// 4. 普通博主：批量推送至粉丝Inbox
+	// 4. 普通博主：批量推送至粉丝Inbox（保留 1000 条）
 	followerIDs, err := w.repo.GetFollowerIDs(ctx, e.AuthorID)
 	if err != nil {
 		log.Printf("failed to get follower IDs for %d: %v", e.AuthorID, err)
@@ -113,7 +119,10 @@ func (w *TimelineWorker) handleVideoPublish(ctx context.Context, d amqp.Delivery
 	for _, fid := range followerIDs {
 		inboxKey := redis.Inbox(fid)
 		w.rdb.ZAdd(ctx, inboxKey, goredis.Z{Score: float64(e.CreateTime), Member: e.VideoID})
-		w.rdb.ZRemRangeByRank(ctx, inboxKey, 0, -1001)
+		in, _ := w.rdb.ZCard(ctx, inboxKey).Result()
+		if in > 1000 {
+			w.rdb.ZRemRangeByRank(ctx, inboxKey, 0, int64(in-1000-1))
+		}
 	}
 
 	// 5. 删除作者的冷拉取缓存（可选）
@@ -209,11 +218,14 @@ func (w *LikeWorker) handleLike(ctx context.Context, d amqp.Delivery) {
 		return
 	}
 
-	// 更新 MySQL likes_count
+	// 更新 MySQL likes_count 和 popularity
 	if err := w.repo.IncrementLikesCount(ctx, e.VideoID, 1); err != nil {
 		log.Printf("failed to increment likes_count for video %d: %v", e.VideoID, err)
 		d.Nack(false, true) // requeue
 		return
+	}
+	if err := w.repo.IncrementVideoPopularity(ctx, e.VideoID, 1); err != nil {
+		log.Printf("failed to increment popularity for video %d: %v", e.VideoID, err)
 	}
 
 	// Cache Aside：删除视频实体缓存和详情缓存，下次读时重建
@@ -231,11 +243,14 @@ func (w *LikeWorker) handleUnlike(ctx context.Context, d amqp.Delivery) {
 		return
 	}
 
-	// 更新 MySQL likes_count
+	// 更新 MySQL likes_count 和 popularity
 	if err := w.repo.IncrementLikesCount(ctx, e.VideoID, -1); err != nil {
 		log.Printf("failed to decrement likes_count for video %d: %v", e.VideoID, err)
 		d.Nack(false, true) // requeue
 		return
+	}
+	if err := w.repo.IncrementVideoPopularity(ctx, e.VideoID, -1); err != nil {
+		log.Printf("failed to decrement popularity for video %d: %v", e.VideoID, err)
 	}
 
 	// Cache Aside：删除视频实体缓存和详情缓存
@@ -457,7 +472,12 @@ func (w *SocialWorker) handleFollow(ctx context.Context, d amqp.Delivery) {
 		return
 	}
 
-	acc, _ := w.repo.GetAccountByID(ctx, e.VloggerID)
+	acc, err := w.repo.GetAccountByID(ctx, e.VloggerID)
+	if err != nil {
+		log.Printf("vlogger account %d not found, skip: %v", e.VloggerID, err)
+		d.Ack(false)
+		return
+	}
 	log.Printf("[follow] vlogger_id=%d follower_count=%d", e.VloggerID, acc.FollowerCount)
 
 	// 删除粉丝的冷拉取缓存
