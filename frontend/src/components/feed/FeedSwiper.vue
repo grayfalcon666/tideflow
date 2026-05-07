@@ -109,7 +109,7 @@ defineExpose({ scrollToIndex: (idx: number) => {
 }, getActiveVideoPlayer: () => {
   const slides = scrollEl.value?.querySelectorAll('.feed-slide')
   const slide = slides?.[props.activeIndex]
-  return slide?.querySelector('.video-player')?.__vueParentComponent?.exposed as any
+  return (slide?.querySelector('.video-player') as any)?.__vueParentComponent?.exposed
 } })
 </script>
 

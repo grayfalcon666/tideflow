@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -36,8 +37,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/me',
     redirect: () => {
-      const id = (window as any).__tideflow_user_id__
-      return id ? `/u/${id}` : '/account'
+      const authStore = useAuthStore()
+      return authStore.accountId ? `/u/${authStore.accountId}` : '/account'
     },
     meta: { requiresAuth: true },
   },
@@ -83,10 +84,10 @@ const router = createRouter({
   routes,
 })
 
-// Navigation guard
+// Navigation guard (synchronous)
 router.beforeEach((to) => {
-  const token = (window as any).__tideflow_access_token__
-  if (to.meta.requiresAuth && !token) {
+  const authStore = useAuthStore()
+  if (to.meta.requiresAuth && !authStore.isLoggedIn) {
     return `/account?redirect=${to.fullPath}`
   }
 })

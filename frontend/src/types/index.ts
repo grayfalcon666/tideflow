@@ -131,14 +131,16 @@ export interface FollowResp {
 export interface Notification {
   id: number
   type: 'like' | 'comment' | 'follow'
-  sender_id: number
-  sender_username: string
-  sender_avatar: string
+  sender: {
+    id: number
+    username: string
+    avatar_url: string
+  }
   target_id: number
   target_title?: string
   target_cover?: string
   content: string
-  occurred_at: number
+  created_at: string
   is_read: boolean
 }
 

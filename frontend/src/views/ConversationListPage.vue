@@ -51,10 +51,10 @@ onMounted(() => {
       <div class="conv-info">
         <div class="conv-top">
           <span class="conv-username">{{ conv.peer_username }}</span>
-          <span class="conv-time">{{ timeAgo(conv.last_message.created_at) }}</span>
+          <span class="conv-time">{{ conv.last_message ? timeAgo(conv.last_message.created_at) : '' }}</span>
         </div>
         <div class="conv-preview">
-          {{ conv.last_message.content }}
+          {{ conv.last_message?.content || '暂无消息' }}
         </div>
       </div>
       <div v-if="conv.unread_count > 0" class="unread-badge">

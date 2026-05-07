@@ -74,8 +74,8 @@ onMounted(() => {
   }
 
   // Set CSS vars for actual heights of nav elements
-  const tabBar = document.querySelector('.feed-tab-bar') || document.querySelector('[class*="feed-tab-bar"]')
-  const bottomNav = document.querySelector('.bottom-nav')
+  const tabBar = document.querySelector('.feed-tab-bar') as HTMLElement || document.querySelector('[class*="feed-tab-bar"]') as HTMLElement
+  const bottomNav = document.querySelector('.bottom-nav') as HTMLElement
   if (tabBar) {
     document.documentElement.style.setProperty('--tab-bar-height', tabBar.offsetHeight + 'px')
   }
@@ -95,7 +95,7 @@ const getActivePlayer = () => {
 const getPlayerAtIndex = (idx: number) => {
   const slides = swiperRef.value?.$el?.querySelectorAll('.feed-slide')
   const slide = slides?.[idx]
-  return slide?.querySelector('.video-player')?.__vueParentComponent?.exposed as any
+  return (slide?.querySelector('.video-player') as any)?.__vueParentComponent?.exposed
 }
 
 // Keyboard shortcuts

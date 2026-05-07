@@ -35,13 +35,13 @@ let indicatorTimer: ReturnType<typeof setTimeout> | null = null
 const isFullscreen = ref(false)
 
 // Video style: mobile landscape -> contain, otherwise cover
-const videoStyle = ref({ width: '100%', height: '100%', objectFit: 'cover' as const })
+const videoStyle = ref<{ width: string; height: string; objectFit: 'cover' | 'contain' }>({ width: '100%', height: '100%', objectFit: 'cover' })
 
 const applyVideoStyle = (video: HTMLVideoElement) => {
   const isMobile = window.innerWidth < 1024
   const isLandscape = video.videoWidth > video.videoHeight
   if (isMobile && isLandscape) {
-    videoStyle.value = { width: '100%', height: 'auto', objectFit: 'contain' }
+    videoStyle.value = { width: '100%', height: 'auto', objectFit: 'contain' as const }
   } else {
     videoStyle.value = { width: '100%', height: '100%', objectFit: 'cover' }
   }

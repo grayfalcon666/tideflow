@@ -75,9 +75,9 @@ const load = async (reset = false) => {
     const d = resp.data.data
     if (!d) return
     if (reset) {
-      items.value = normalizeVideos(d.items as RawVideoItem[])
+      items.value = normalizeVideos(d.items as any)
     } else {
-      items.value.push(...normalizeVideos(d.items as RawVideoItem[]))
+      items.value.push(...normalizeVideos(d.items as any))
     }
     cursor.value = d.next_cursor ?? '0'
     hasMore.value = d.has_more ?? false

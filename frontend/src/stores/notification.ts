@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Notification, SSENotification } from '../types'
 import * as notificationService from '../services/notification'
+import { useAuthStore } from './auth'
 
 export const useNotificationStore = defineStore('notification', () => {
   const notifications = ref<Notification[]>([])
@@ -14,7 +15,8 @@ export const useNotificationStore = defineStore('notification', () => {
 
   const connectSSE = () => {
     if (eventSource) return
-    const token = window.__tideflow_access_token__
+    const authStore = useAuthStore()
+    const token = authStore.accessToken
     if (!token) return
 
     eventSource = new EventSource(`/api/v1/notifications/stream?token=${encodeURIComponent(token)}`)
@@ -32,12 +34,14 @@ export const useNotificationStore = defineStore('notification', () => {
         const notif: Notification = {
           id: Date.now(),
           type: data.type,
-          sender_id: data.sender_id,
-          sender_username: '',
-          sender_avatar: '',
+          sender: {
+            id: data.sender_id,
+            username: '',
+            avatar_url: '',
+          },
           target_id: data.target_id,
           content: data.content,
-          occurred_at: data.occurred_at,
+          created_at: String(data.occurred_at),
           is_read: false,
         }
         notifications.value.unshift(notif)

@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 import { Notify } from 'quasar'
+import type { Router } from 'vue-router'
 
 const API_BASE = '/api/v1'
 
@@ -8,9 +9,19 @@ const api: AxiosInstance = axios.create({
   timeout: 30000,
 })
 
+// Injected dependencies (set via initApi)
+let _router: Router | null = null
+let _getAuthStore: (() => any) | null = null
+
+export function initApi(router: Router, getAuthStore: () => any) {
+  _router = router
+  _getAuthStore = getAuthStore
+}
+
 // Request interceptor: attach JWT
 api.interceptors.request.use((config) => {
-  const token = (window as unknown as Record<string, string>).__tideflow_access_token__
+  const store = _getAuthStore?.()
+  const token = store?.accessToken
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -31,25 +42,16 @@ api.interceptors.response.use(
     const data = error.response?.data as any
 
     if (status === 401) {
-      // Try refresh token
-      const refreshToken = localStorage.getItem('tideflow_refresh_token')
-      if (refreshToken) {
-        try {
-          const resp = await axios.post(`${API_BASE}/auth/refresh`, { refresh_token: refreshToken })
-          const newAccess = resp.data.data?.access_token
-          if (newAccess) {
-            (window as unknown as Record<string, string>).__tideflow_access_token__ = newAccess
-            // Retry original request
-            const config = error.config!
-            config.headers.Authorization = `Bearer ${newAccess}`
-            return api(config)
-          }
-        } catch {
-          // Refresh failed
+      const store = _getAuthStore?.()
+      if (store) {
+        const ok = await store.refreshAccessToken()
+        if (ok && error.config) {
+          error.config.headers.Authorization = `Bearer ${store.accessToken}`
+          return api(error.config)
         }
+        // Refresh failed -> logout and soft redirect
+        store.logout(_router ?? undefined)
       }
-      // Redirect to login
-      window.location.href = '/account'
     } else if (status === 429) {
       Notify.create({ message: '操作太频繁，请稍后再试', type: 'warning', icon: 'warning' })
     } else if (status && status >= 500) {

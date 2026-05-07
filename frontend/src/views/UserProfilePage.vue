@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQuasar } from 'quasar'
 import UserInfoCard from '../components/user/UserInfoCard.vue'
 import FollowButton from '../components/user/FollowButton.vue'
 import UserVideoTab from '../components/user/UserVideoTab.vue'
@@ -12,8 +13,18 @@ import { useAuthStore } from '../stores/auth'
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const $q = useQuasar()
 
-const userId = computed(() => Number(route.params.id))
+// 安全获取用户 ID，无效则重定向
+const userId = computed(() => {
+  const idParam = route.params.id
+  if (typeof idParam === 'string') {
+    const num = Number(idParam)
+    if (!isNaN(num) && num > 0) return num
+  }
+  return null
+})
+
 const profile = ref<UserProfile | null>(null)
 const activeTab = ref<'videos' | 'liked'>('videos')
 const loading = ref(true)
@@ -21,13 +32,26 @@ const loading = ref(true)
 const isMe = computed(() => authStore.accountId === userId.value)
 
 const fetchProfile = async () => {
+  const id = userId.value
+  if (!id) {
+    $q.notify({ type: 'negative', message: '无效的用户ID', position: 'top' })
+    router.push('/')
+    return
+  }
+
   loading.value = true
   try {
-    const resp = await userService.getUser(userId.value)
+    const resp = await userService.getUser(id)
     const d = resp.data.data
     if (d) {
       profile.value = d
+    } else {
+      throw new Error('用户不存在')
     }
+  } catch (error) {
+    console.error('获取用户资料失败', error)
+    $q.notify({ type: 'negative', message: '用户不存在或网络错误', position: 'top' })
+    router.push('/')
   } finally {
     loading.value = false
   }
@@ -46,7 +70,7 @@ onMounted(() => fetchProfile())
       <UserInfoCard :user="profile" :isMe="isMe" />
 
       <div v-if="!isMe" class="profile-follow-btn">
-        <FollowButton :userId="userId" :initialFollowing="profile.is_following" />
+        <FollowButton v-if="userId !== null" :userId="userId" :initialFollowing="profile.is_following" />
       </div>
 
       <div class="user-tabs">
@@ -58,7 +82,7 @@ onMounted(() => fetchProfile())
         </button>
       </div>
 
-      <UserVideoTab v-if="activeTab === 'videos'" :userId="userId" />
+      <UserVideoTab v-if="activeTab === 'videos' && userId !== null" :userId="userId" />
       <UserLikedTab v-if="activeTab === 'liked'" />
     </template>
   </div>

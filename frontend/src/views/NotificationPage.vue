@@ -1,15 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth'
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useNotificationStore } from '../stores/notification'
 import type { Notification } from '../types'
 import TFIcon from '../components/common/TFIcon.vue'
 
-const route = useRoute()
 const router = useRouter()
 const notifStore = useNotificationStore()
-const authStore = useAuthStore()
 
 const timeAgo = (ts: number) => {
   const diff = Date.now() - ts * 1000
@@ -36,7 +33,7 @@ const notifColor = (type: string) => {
 
 const handleNotifClick = (n: Notification) => {
   if (n.type === 'follow') {
-    router.push(`/u/${n.sender_id}`)
+    router.push(`/u/${n.sender.id}`)
   } else {
     router.push(`/video/${n.target_id}`)
   }
@@ -81,15 +78,15 @@ onMounted(() => {
       >
         <q-item-section avatar>
           <q-avatar size="44px">
-            <img :src="n.sender_avatar || '/default-avatar.svg'" />
+            <img :src="n.sender?.avatar_url || '/default-avatar.svg'" />
           </q-avatar>
         </q-item-section>
         <q-item-section>
           <q-item-label class="notif-text">
-            <strong>{{ n.sender_username }}</strong>
+            <strong>{{ n.sender?.username }}</strong>
             {{ n.content }}
           </q-item-label>
-          <q-item-label caption class="notif-time">{{ timeAgo(n.occurred_at) }}</q-item-label>
+          <q-item-label caption class="notif-time">{{ timeAgo(new Date(n.created_at).getTime() / 1000) }}</q-item-label>
         </q-item-section>
         <q-item-section side>
           <TFIcon :name="notifIcon(n.type)" :color="notifColor(n.type)" :size="20" />
