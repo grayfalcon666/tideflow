@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -38,7 +40,13 @@ func (h *InteractionHandler) LikeVideo(c *gin.Context) {
 	}
 
 	if err := h.interaction.LikeVideo(c.Request.Context(), userID, uint(videoID)); err != nil {
-		response.InternalServerError(c, err.Error())
+		if errors.Is(err, service.ErrAlreadyLiked) {
+			response.Conflict(c, err.Error())
+		} else if strings.Contains(err.Error(), "not found") {
+			response.NotFound(c, err.Error())
+		} else {
+			response.InternalServerError(c, err.Error())
+		}
 		return
 	}
 	response.Success(c, nil)
@@ -64,7 +72,13 @@ func (h *InteractionHandler) UnlikeVideo(c *gin.Context) {
 	}
 
 	if err := h.interaction.UnlikeVideo(c.Request.Context(), userID, uint(videoID)); err != nil {
-		response.InternalServerError(c, err.Error())
+		if errors.Is(err, service.ErrLikeNotExists) {
+			response.Conflict(c, err.Error())
+		} else if strings.Contains(err.Error(), "not found") {
+			response.NotFound(c, err.Error())
+		} else {
+			response.InternalServerError(c, err.Error())
+		}
 		return
 	}
 	response.Success(c, nil)

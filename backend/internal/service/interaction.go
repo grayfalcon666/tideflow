@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -9,6 +10,11 @@ import (
 	"tideflow/internal/models"
 	"tideflow/internal/mq"
 	"tideflow/internal/repository"
+)
+
+var (
+	ErrAlreadyLiked    = errors.New("already liked")
+	ErrLikeNotExists   = errors.New("like not exists")
 )
 
 type InteractionService struct {
@@ -21,14 +27,18 @@ func NewInteractionService(repo *repository.Repository, mqInstance *mq.MQ) *Inte
 }
 
 func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint) error {
-	_, err := s.repo.GetLike(ctx, videoID, userID)
-	if err == nil {
-		return nil
+	// 检查视频是否存在
+	if _, err := s.repo.GetVideoByID(ctx, videoID); err != nil {
+		return fmt.Errorf("video %d not found", videoID)
 	}
 
-	like := &models.Like{VideoID: videoID, AccountID: userID, CreatedAt: time.Now()}
-	if err := s.repo.CreateLike(ctx, like); err != nil {
+	// ON DUPLICATE KEY UPDATE: 仅当真正插入新记录(status 0→1)时才发 MQ
+	inserted, err := s.repo.UpsertLike(ctx, videoID, userID)
+	if err != nil {
 		return err
+	}
+	if !inserted {
+		return ErrAlreadyLiked
 	}
 
 	// 发布点赞事件，LikeWorker 消费：更新 likes_count
@@ -54,8 +64,17 @@ func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint
 }
 
 func (s *InteractionService) UnlikeVideo(ctx context.Context, userID, videoID uint) error {
-	if err := s.repo.DeleteLike(ctx, videoID, userID); err != nil {
+	// 检查视频是否存在
+	if _, err := s.repo.GetVideoByID(ctx, videoID); err != nil {
+		return fmt.Errorf("video %d not found", videoID)
+	}
+	// ON DUPLICATE KEY UPDATE: 仅当真正变更(status 1→0)时才发 MQ
+	changed, err := s.repo.UpdateLikeStatus(ctx, videoID, userID, 0)
+	if err != nil {
 		return err
+	}
+	if !changed {
+		return ErrLikeNotExists
 	}
 
 	// 发布取消点赞事件，LikeWorker 消费：更新 likes_count

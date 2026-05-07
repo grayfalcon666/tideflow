@@ -110,13 +110,12 @@ func (r *Repository) SoftDeleteVideo(ctx context.Context, id uint) error {
 
 func (r *Repository) IncrementLikesCount(ctx context.Context, id uint, delta int64) error {
 	return r.db.WithContext(ctx).Exec(
-		"UPDATE videos SET likes_count = likes_count + ? WHERE id = ? AND deleted_at IS NULL",
+		"UPDATE videos SET likes_count = GREATEST(likes_count + ?, 0) WHERE id = ? AND deleted_at IS NULL",
 		delta, id,
 	).Error
 }
 
 func (r *Repository) IncrementFollowerCount(ctx context.Context, id uint, delta int64) error {
-	// Use GREATEST to prevent follower_count from going negative
 	return r.db.WithContext(ctx).Exec(
 		"UPDATE accounts SET follower_count = GREATEST(follower_count + ?, 0) WHERE id = ?",
 		delta, id,
@@ -125,22 +124,42 @@ func (r *Repository) IncrementFollowerCount(ctx context.Context, id uint, delta 
 
 func (r *Repository) IncrementVideoPopularity(ctx context.Context, id uint, delta int64) error {
 	return r.db.WithContext(ctx).Exec(
-		"UPDATE videos SET popularity = popularity + ? WHERE id = ? AND deleted_at IS NULL",
+		"UPDATE videos SET popularity = GREATEST(popularity + ?, 0) WHERE id = ? AND deleted_at IS NULL",
 		delta, id,
 	).Error
 }
 
-func (r *Repository) CreateLike(ctx context.Context, like *models.Like) error {
-	return r.db.WithContext(ctx).Create(like).Error
+// UpsertLike inserts a like record or reactivates a previously cancelled one (status 0→1).
+// Returns (true, nil) if status was actually changed (inserted or 0→1), (false, nil) if already active.
+func (r *Repository) UpsertLike(ctx context.Context, videoID, accountID uint) (bool, error) {
+	result := r.db.WithContext(ctx).
+		Exec(`INSERT INTO likes (video_id, account_id, status, created_at)
+              VALUES (?, ?, 1, NOW())
+              ON DUPLICATE KEY UPDATE
+                status = IF(status = 0, 1, status),
+                created_at = IF(status = 0, NOW(), created_at)`,
+			videoID, accountID)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
 }
 
-func (r *Repository) DeleteLike(ctx context.Context, videoID, accountID uint) error {
-	return r.db.WithContext(ctx).Where("video_id = ? AND account_id = ?", videoID, accountID).Delete(&models.Like{}).Error
+// UpdateLikeStatus updates the status of a like record.
+// Returns (true, nil) if status was changed, (false, nil) if already at target status.
+func (r *Repository) UpdateLikeStatus(ctx context.Context, videoID, accountID uint, status int8) (bool, error) {
+	result := r.db.WithContext(ctx).
+		Exec(`UPDATE likes SET status = ? WHERE video_id = ? AND account_id = ? AND status != ?`,
+			status, videoID, accountID, status)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
 }
 
 func (r *Repository) GetLike(ctx context.Context, videoID, accountID uint) (*models.Like, error) {
 	var like models.Like
-	err := r.db.WithContext(ctx).Where("video_id = ? AND account_id = ?", videoID, accountID).First(&like).Error
+	err := r.db.WithContext(ctx).Where("video_id = ? AND account_id = ? AND status = 1", videoID, accountID).First(&like).Error
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +168,7 @@ func (r *Repository) GetLike(ctx context.Context, videoID, accountID uint) (*mod
 
 func (r *Repository) GetLikesByAccount(ctx context.Context, accountID uint, before time.Time, limit int) ([]*models.Like, error) {
 	var likes []*models.Like
-	query := r.db.WithContext(ctx).Where("account_id = ?", accountID)
+	query := r.db.WithContext(ctx).Where("account_id = ? AND status = 1", accountID)
 	if !before.IsZero() {
 		query = query.Where("created_at < ?", before)
 	}
@@ -163,7 +182,7 @@ func (r *Repository) GetLikesByAccountAndVideos(ctx context.Context, accountID u
 	}
 	var likes []*models.Like
 	err := r.db.WithContext(ctx).
-		Where("account_id = ? AND video_id IN ?", accountID, videoIDs).
+		Where("account_id = ? AND video_id IN ? AND status = 1", accountID, videoIDs).
 		Find(&likes).Error
 	if err != nil {
 		return nil, err
@@ -214,13 +233,15 @@ func (r *Repository) SoftDeleteComment(ctx context.Context, id uint) error {
 }
 
 // FollowOrCreate inserts or updates a follow relationship.
-// Uses INSERT ... ON DUPLICATE KEY UPDATE status=1.
-// Returns (affectedRows, error). affectedRows=1 means new insert, =2 means already existed and was updated.
-// 如果记录已存在且status=1，affectedRows=2，此时不需要发MQ事件。
+// Uses INSERT ... ON DUPLICATE KEY UPDATE: only updates status (and updated_at) when status was 0.
+// Returns (affectedRows, error). affectedRows=1 means new insert or 0→1 change (发MQ).
+// affectedRows=0 means already status=1 (不发MQ)。
 func (r *Repository) FollowOrCreate(ctx context.Context, followerID, vloggerID uint) (int64, error) {
 	res := r.db.WithContext(ctx).Exec(
 		"INSERT INTO socials (follower_id, vlogger_id, status, created_at, updated_at) VALUES (?, ?, 1, NOW(), NOW()) "+
-			"ON DUPLICATE KEY UPDATE status = 1, updated_at = NOW()",
+			"ON DUPLICATE KEY UPDATE "+
+			"status = IF(status = 0, 1, status), "+
+			"updated_at = IF(status = 0, NOW(), updated_at)",
 		followerID, vloggerID,
 	)
 	if res.Error != nil {
@@ -233,7 +254,7 @@ func (r *Repository) FollowOrCreate(ctx context.Context, followerID, vloggerID u
 // Returns (rows, error). rows=1 means actually unfollowed (发MQ)，=0 means was not following (不发MQ)。
 func (r *Repository) UnfollowStatus(ctx context.Context, followerID, vloggerID uint) (int64, error) {
 	res := r.db.WithContext(ctx).Exec(
-		"UPDATE socials SET status = 0, updated_at = NOW() WHERE follower_id = ? AND vlogger_id = ? AND status = 1",
+		"UPDATE socials SET status = 0 WHERE follower_id = ? AND vlogger_id = ? AND status = 1",
 		followerID, vloggerID,
 	)
 	if res.Error != nil {

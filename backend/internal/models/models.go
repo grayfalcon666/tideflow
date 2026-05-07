@@ -46,6 +46,7 @@ type Like struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	VideoID   uint      `gorm:"not null;uniqueIndex:idx_like_video_account" json:"video_id"`
 	AccountID uint      `gorm:"not null;uniqueIndex:idx_like_video_account" json:"account_id"`
+	Status    int8      `gorm:"not null;default:1" json:"status"` // 1=点赞, 0=取消
 	CreatedAt time.Time `json:"created_at"`
 }
 
