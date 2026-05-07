@@ -4,6 +4,12 @@ import { quasar, transformAssetUrls } from '@quasar/vite-plugin'
 import path from 'path'
 
 export default defineConfig({
+  // 强制开启开发模式
+  mode: 'development',
+  define: {
+    __VUE_PROD_DEVTOOLS__: true,
+    __VUE_OPTIONS_API__: true,
+  },
   plugins: [
     vue({
       template: { transformAssetUrls }
