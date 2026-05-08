@@ -159,6 +159,14 @@ func parseCursorInt64(s string) (int64, error) {
 	return v, nil
 }
 
+func (s *InteractionService) GetAccountAvatar(ctx context.Context, id uint) (string, error) {
+	acc, err := s.repo.GetAccountByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return acc.AvatarURL, nil
+}
+
 func (s *InteractionService) PublishComment(ctx context.Context, videoID, authorID uint, username, content string, parentID, rootID uint) (*models.Comment, error) {
 	comment := &models.Comment{
 		VideoID:   videoID,
@@ -249,6 +257,19 @@ func (s *InteractionService) GetComments(ctx context.Context, videoID uint, root
 		comments = comments[:limit]
 	}
 
+	// 批量获取评论作者的 avatar_url
+	authorIDs := make([]uint, len(comments))
+	for i, c := range comments {
+		authorIDs[i] = c.AuthorID
+	}
+	accountMap := make(map[uint]string)
+	if len(authorIDs) > 0 {
+		accounts, _ := s.repo.GetAccountsByIDs(ctx, authorIDs)
+		for _, acc := range accounts {
+			accountMap[acc.ID] = acc.AvatarURL
+		}
+	}
+
 	result := make([]*CommentWithReplies, len(comments))
 	for i, c := range comments {
 		replyCount, _ := s.repo.CountReplies(ctx, c.ID)
@@ -256,6 +277,7 @@ func (s *InteractionService) GetComments(ctx context.Context, videoID uint, root
 			ID:         c.ID,
 			AuthorID:   c.AuthorID,
 			Username:   c.Username,
+			AvatarURL:  accountMap[c.AuthorID],
 			Content:    c.Content,
 			ParentID:   c.ParentID,
 			RootID:     c.RootID,
@@ -271,12 +293,27 @@ func (s *InteractionService) GetComments(ctx context.Context, videoID uint, root
 			rootIDs[i] = c.ID
 		}
 		replies, _ := s.repo.GetRepliesByRootIDs(ctx, rootIDs)
+
+		// 收集所有回复的作者 ID
+		replyAuthorIDs := make([]uint, len(replies))
+		for i, r := range replies {
+			replyAuthorIDs[i] = r.AuthorID
+		}
+		replyAccountMap := make(map[uint]string)
+		if len(replyAuthorIDs) > 0 {
+			replyAccounts, _ := s.repo.GetAccountsByIDs(ctx, replyAuthorIDs)
+			for _, acc := range replyAccounts {
+				replyAccountMap[acc.ID] = acc.AvatarURL
+			}
+		}
+
 		replyMap := make(map[uint][]*CommentWithReplies)
 		for _, r := range replies {
 			replyMap[r.RootID] = append(replyMap[r.RootID], &CommentWithReplies{
 				ID:         r.ID,
 				AuthorID:   r.AuthorID,
 				Username:   r.Username,
+				AvatarURL:  replyAccountMap[r.AuthorID],
 				Content:    r.Content,
 				ParentID:   r.ParentID,
 				RootID:     r.RootID,
@@ -301,13 +338,14 @@ func (s *InteractionService) GetComments(ctx context.Context, videoID uint, root
 }
 
 type CommentWithReplies struct {
-	ID         uint                `json:"id"`
-	AuthorID   uint                `json:"author_id"`
-	Username   string              `json:"username"`
-	Content    string              `json:"content"`
-	ParentID   uint                `json:"parent_id"`
-	RootID     uint                `json:"root_id"`
-	CreatedAt  time.Time          `json:"created_at"`
-	ReplyCount int                `json:"reply_count"`
-	Replies    []*CommentWithReplies `json:"replies,omitempty"`
+	ID         uint                   `json:"id"`
+	AuthorID   uint                   `json:"author_id"`
+	Username   string                 `json:"username"`
+	AvatarURL  string                 `json:"avatar_url"`
+	Content    string                 `json:"content"`
+	ParentID   uint                   `json:"parent_id"`
+	RootID     uint                   `json:"root_id"`
+	CreatedAt  time.Time              `json:"created_at"`
+	ReplyCount int                    `json:"reply_count"`
+	Replies    []*CommentWithReplies  `json:"replies,omitempty"`
 }

@@ -17,7 +17,7 @@ func NewMessageService(repo *repository.Repository) *MessageService {
 	return &MessageService{repo: repo}
 }
 
-func (s *MessageService) SendMessage(ctx context.Context, fromID, toID uint, content string) (uint, error) {
+func (s *MessageService) SendMessage(ctx context.Context, fromID, toID uint, content string) (uint, time.Time, error) {
 	msg := &models.Message{
 		FromID:    fromID,
 		ToID:      toID,
@@ -26,9 +26,9 @@ func (s *MessageService) SendMessage(ctx context.Context, fromID, toID uint, con
 		CreatedAt: time.Now(),
 	}
 	if err := s.repo.CreateMessage(ctx, msg); err != nil {
-		return 0, err
+		return 0, time.Time{}, err
 	}
-	return msg.ID, nil
+	return msg.ID, msg.CreatedAt, nil
 }
 
 func (s *MessageService) GetConversations(ctx context.Context, userID uint) ([]*ConversationItem, error) {

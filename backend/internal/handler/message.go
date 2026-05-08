@@ -40,12 +40,19 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	id, err := h.msg.SendMessage(c.Request.Context(), userID, req.ToID, req.Content)
+	id, createdAt, err := h.msg.SendMessage(c.Request.Context(), userID, req.ToID, req.Content)
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
-	response.Created(c, gin.H{"message_id": id})
+	response.Created(c, gin.H{
+		"id":         id,
+		"from_id":    userID,
+		"to_id":      req.ToID,
+		"content":    req.Content,
+		"created_at": createdAt,
+		"is_read":    false,
+	})
 }
 
 // @Summary 会话列表

@@ -86,7 +86,7 @@ func main() {
 	userHandler := handler.NewUserHandler(userSvc)
 	videoHandler := handler.NewVideoHandler(videoSvc)
 	feedHandler := handler.NewFeedHandler(feedSvc)
-	interactionHandler := handler.NewInteractionHandler(interactionSvc)
+	interactionHandler := handler.NewInteractionHandler(interactionSvc, userSvc)
 	msgHandler := handler.NewMessageHandler(msgSvc)
 	notifHandler := handler.NewNotificationHandler(notifSvc)
 	tagHandler := handler.NewTagHandler(tagSvc)

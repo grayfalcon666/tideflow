@@ -14,10 +14,11 @@ import (
 
 type InteractionHandler struct {
 	interaction *service.InteractionService
+	user       *service.UserService
 }
 
-func NewInteractionHandler(interaction *service.InteractionService) *InteractionHandler {
-	return &InteractionHandler{interaction: interaction}
+func NewInteractionHandler(interaction *service.InteractionService, user *service.UserService) *InteractionHandler {
+	return &InteractionHandler{interaction: interaction, user: user}
 }
 
 // @Summary 点赞视频
@@ -153,7 +154,15 @@ func (h *InteractionHandler) GetLikedVideos(c *gin.Context) {
 // @Router /api/v1/videos/{id}/comments [post]
 func (h *InteractionHandler) PublishComment(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	username, _ := c.Get("username")
+	user, err := h.user.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		response.InternalServerError(c, "get user failed: "+err.Error())
+		return
+	}
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
 	videoIDStr := c.Param("id")
 	videoID, err := strconv.ParseUint(videoIDStr, 10, 64)
 	if err != nil {
@@ -171,21 +180,18 @@ func (h *InteractionHandler) PublishComment(c *gin.Context) {
 		return
 	}
 
-	uname := ""
-	if u, ok := username.(string); ok {
-		uname = u
-	}
-
-	comment, err := h.interaction.PublishComment(c.Request.Context(), uint(videoID), userID, uname, req.Content, req.ParentID, req.RootID)
+	comment, err := h.interaction.PublishComment(c.Request.Context(), uint(videoID), userID, username, req.Content, req.ParentID, req.RootID)
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
 
+	avatarURL, _ := h.interaction.GetAccountAvatar(c.Request.Context(), userID)
 	cwb := &service.CommentWithReplies{
 		ID:         comment.ID,
 		AuthorID:   comment.AuthorID,
 		Username:   comment.Username,
+		AvatarURL:  avatarURL,
 		Content:    comment.Content,
 		ParentID:   comment.ParentID,
 		RootID:     comment.RootID,
