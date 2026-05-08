@@ -98,9 +98,6 @@ func TestConstants(t *testing.T) {
 	if sfPollTimeout != 2*time.Second {
 		t.Errorf("sfPollTimeout = %v, want 2s", sfPollTimeout)
 	}
-	if detailTTL != 5*time.Minute {
-		t.Errorf("detailTTL = %v, want 5m", detailTTL)
-	}
 	if followCacheTTL != 24*time.Hour {
 		t.Errorf("followCacheTTL = %v, want 24h", followCacheTTL)
 	}

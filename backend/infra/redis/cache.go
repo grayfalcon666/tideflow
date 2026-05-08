@@ -27,10 +27,6 @@ const (
 	sfPollInterval = 100 * time.Millisecond
 	// 轮询最多等待时间
 	sfPollTimeout = 2 * time.Second
-	// 视频详情缓存 TTL，设计文档要求 5min
-	detailTTL = 5 * time.Minute
-	// 详情分布式锁 TTL
-	detailLockTTL = 10 * time.Second
 	// 关注流冷拉取缓存 TTL，设计文档要求 24h
 	followCacheTTL = 24 * time.Hour
 )
@@ -40,7 +36,6 @@ type Cache struct {
 	rdb   *redis.Client
 	sf    *singleflight.Group
 	repo  *repository.Repository
-	lock  *Lock
 }
 
 func NewCache(rdb *redis.Client) *Cache {
@@ -51,14 +46,14 @@ func NewCache(rdb *redis.Client) *Cache {
 	}
 }
 
-// SetLock sets the distributed lock (required for GetVideoDetail).
-func (c *Cache) SetLock(lock *Lock) {
-	c.lock = lock
-}
-
 // SetRepo 设置 repository 引用（用于 DB 降级回填）
 func (c *Cache) SetRepo(repo *repository.Repository) {
 	c.repo = repo
+}
+
+// GetRedis returns the underlying redis client for low-level operations.
+func (c *Cache) GetRedis() *redis.Client {
+	return c.rdb
 }
 
 // ---------------------------------------------------------------
@@ -238,94 +233,26 @@ func (c *Cache) InvalidateVideo(id uint) {
 	c.rdb.Del(context.Background(), key) // 同时删除 L2
 }
 
-// ---------------------------------------------------------------
-// 视频详情缓存
-// ---------------------------------------------------------------
-
+// GetVideoDetail 复用 GetVideoEntity 的单条查询，内部通过 singleflight 防止击穿。
 func (c *Cache) GetVideoDetail(ctx context.Context, id uint, dbQuery func(context.Context, uint) (*models.Video, error)) (*models.Video, error) {
-	key := VideoDetail(id)
-
-	// L1
-	if v, ok := c.local.Get(key); ok {
-		if video, ok := v.(*models.Video); ok {
-			slog.Info("cache: GetVideoDetail L1命中", "key", key, "id", id)
-			return video, nil
-		}
-	}
-
-	// L2
-	v, err := c.rdb.Get(ctx, key).Result()
-	if err == nil {
-		var video models.Video
-		if json.Unmarshal([]byte(v), &video) == nil {
-			c.local.Set(key, &video, L1TTL)
-			slog.Info("cache: GetVideoDetail L2命中", "key", key, "id", id)
-			return &video, nil
-		}
-	}
-
-	// 回源前分布式锁
-	if c.lock != nil {
-		token := fmt.Sprintf("%d", time.Now().UnixNano())
-		acquired, lockErr := c.lock.AcquireDetail(ctx, id, token, detailLockTTL)
-		if lockErr != nil {
-			return dbQuery(ctx, id) // 锁服务异常直接查库
-		}
-		if !acquired {
-			// 等待其他协程重建
-			for i := 0; i < 10; i++ {
-				time.Sleep(100 * time.Millisecond)
-				v2, err2 := c.rdb.Get(ctx, key).Result()
-				if err2 == nil {
-					var video models.Video
-					if json.Unmarshal([]byte(v2), &video) == nil {
-						return &video, nil
-					}
-				}
-			}
-			// 等待超时直接查库
-			return dbQuery(ctx, id)
-		}
-		// 拿到锁，double-check
-		v, err = c.rdb.Get(ctx, key).Result()
-		if err == nil {
-			var video models.Video
-			if json.Unmarshal([]byte(v), &video) == nil {
-				c.lock.ReleaseDetail(ctx, id, token)
-				return &video, nil
-			}
-		}
-		video, dbErr := dbQuery(ctx, id)
-		if dbErr != nil || video == nil {
-			c.lock.ReleaseDetail(ctx, id, token)
-			return video, dbErr
-		}
-		// 写回
-		data, _ := json.Marshal(video)
-		c.rdb.Set(ctx, key, data, detailTTL)
-		c.local.Set(key, video, L1TTL)
-		c.lock.ReleaseDetail(ctx, id, token)
-		return video, nil
-	}
-
-	// 无锁直接查库
-	return dbQuery(ctx, id)
-}
-
-func (c *Cache) SetVideoDetail(ctx context.Context, video *models.Video) error {
-	key := VideoDetail(video.ID)
-	data, err := json.Marshal(video)
+	videos, err := c.GetVideoByIDs(ctx, []uint{id})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c.local.Set(key, video, L1TTL)
-	return c.rdb.Set(ctx, key, data, detailTTL).Err()
+	if len(videos) == 0 || videos[0] == nil {
+		return dbQuery(ctx, id)
+	}
+	return videos[0], nil
 }
 
+// SetVideoDetail 兼容旧调用，统一写入 VideoEntity。
+func (c *Cache) SetVideoDetail(ctx context.Context, video *models.Video) error {
+	return c.SetVideoEntity(ctx, video)
+}
+
+// InvalidateVideoDetail 兼容旧调用，统一用 InvalidateVideo。
 func (c *Cache) InvalidateVideoDetail(id uint) {
-	key := VideoDetail(id)
-	c.local.Delete(key)
-	c.rdb.Del(context.Background(), key) // 同时删除 L2
+	c.InvalidateVideo(id)
 }
 
 // ---------------------------------------------------------------

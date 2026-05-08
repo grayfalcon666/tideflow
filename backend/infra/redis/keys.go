@@ -9,7 +9,6 @@ const (
 	KeyAccountRefresh  = "account:%d:refresh"
 	KeyRefreshToken    = "refresh:%s"
 	KeyVideoEntity     = "video:entity:%d"
-	KeyVideoDetail     = "video:detail:%d"
 	KeyFeedGlobal      = "feed:global"
 	KeyHotVideo        = "hot:video:%s:%s"
 	KeyHotMerge        = "hot:merge:%s:%s"
@@ -18,8 +17,10 @@ const (
 	KeyFeedCache       = "feed:followcache:%d:before:%s:limit:%d"
 	KeySFLabel         = "sf:%s"
 	KeyRateLimit       = "ratelimit:%s:%s"
-	KeyLock            = "lock:%s"
 	KeyBigVMark        = "bigv:mark:%d"
+	KeyViewLimit      = "ratelimit:view:%d:%d"
+	KeyViewCount      = "count:views:%d"
+	KeyDirtyVideos    = "dirty:videos"
 )
 
 func AccountToken(uid uint) string {
@@ -36,10 +37,6 @@ func RefreshToUID(token string) string {
 
 func VideoEntity(id uint) string {
 	return fmt.Sprintf("%s:"+KeyVideoEntity, Version, id)
-}
-
-func VideoDetail(id uint) string {
-	return fmt.Sprintf("%s:"+KeyVideoDetail, Version, id)
 }
 
 func FeedGlobal() string {
@@ -74,16 +71,18 @@ func RateLimit(action, subject string) string {
 	return fmt.Sprintf("%s:"+KeyRateLimit, Version, action, subject)
 }
 
-// LockKey returns a versioned lock key. Prefer typed functions below.
-func LockKey(target string) string {
-	return fmt.Sprintf("%s:"+KeyLock, Version, target)
-}
-
-// LockDetail returns the distributed lock key for video detail cache.
-func LockDetail(id uint) string {
-	return fmt.Sprintf("%s:lock:detail:%d", Version, id)
-}
-
 func BigVMark(uid uint) string {
 	return fmt.Sprintf("%s:"+KeyBigVMark, Version, uid)
+}
+
+func ViewLimit(userID, videoID uint) string {
+	return fmt.Sprintf("%s:"+KeyViewLimit, Version, userID, videoID)
+}
+
+func ViewCount(videoID uint) string {
+	return fmt.Sprintf("%s:"+KeyViewCount, Version, videoID)
+}
+
+func DirtyVideos() string {
+	return fmt.Sprintf("%s:"+KeyDirtyVideos, Version)
 }

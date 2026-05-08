@@ -12,7 +12,6 @@ func TestKeyConstructors(t *testing.T) {
 		{"AccountRefreshToken", AccountRefreshToken(123), "v1:account:123:refresh"},
 		{"RefreshToUID", RefreshToUID("token-abc"), "v1:refresh:token-abc"},
 		{"VideoEntity", VideoEntity(456), "v1:video:entity:456"},
-		{"VideoDetail", VideoDetail(456), "v1:video:detail:456"},
 		{"FeedGlobal", FeedGlobal(), "v1:feed:global"},
 		{"HotVideo", HotVideo("1m", "202605051200"), "v1:hot:video:1m:202605051200"},
 		{"HotMerge", HotMerge("1h", "202605051200"), "v1:hot:merge:1h:202605051200"},
@@ -21,8 +20,6 @@ func TestKeyConstructors(t *testing.T) {
 		{"FeedCache", FeedCache(5, "2026-05-05T12:00:00Z", 20), "v1:feed:followcache:5:before:2026-05-05T12:00:00Z:limit:20"},
 		{"SFLabel", SFLabel("entity:1"), "v1:sf:entity:1"},
 		{"RateLimit", RateLimit("login", "192.168.1.1"), "v1:ratelimit:login:192.168.1.1"},
-		{"LockKey", LockKey("video:123"), "v1:lock:video:123"},
-		{"LockDetail", LockDetail(99), "v1:lock:detail:99"},
 		{"BigVMark", BigVMark(7), "v1:bigv:mark:7"},
 	}
 
