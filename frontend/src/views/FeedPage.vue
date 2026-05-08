@@ -3,22 +3,22 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import FeedTabBar from '../components/feed/FeedTabBar.vue'
 import FeedSwiper from '../components/feed/FeedSwiper.vue'
-import VideoPlayer from '../components/video/VideoPlayer.vue'
-import SlideAuthorBar from '../components/feed/SlideAuthorBar.vue'
-import SlideInfoBar from '../components/feed/SlideInfoBar.vue'
-import SlideActionBar from '../components/feed/SlideActionBar.vue'
+import FeedSlideContent from '../components/feed/FeedSlideContent.vue'
+import CommentDrawer from '../components/comment/CommentDrawer.vue'
+import BottomNav from '../components/layout/BottomNav.vue'
 import { useVideoControls } from '../composables/useVideoControls'
 import { useFeedStore, type FeedTab } from '../stores/feed'
 import { useAuthStore } from '../stores/auth'
 import { useNotificationStore } from '../stores/notification'
 import type { VideoItem } from '../types'
-import * as videoService from '../services/video'
-import CommentDrawer from '../components/comment/CommentDrawer.vue'
 
 const router = useRouter()
 const feedStore = useFeedStore()
 const authStore = useAuthStore()
 const notifStore = useNotificationStore()
+
+const isMobile = ref(window.innerWidth < 1024)
+const onResize = () => { isMobile.value = window.innerWidth < 1024 }
 
 const activeTab = ref<FeedTab>('latest')
 const activeIndex = ref(0)
@@ -87,7 +87,8 @@ onMounted(() => {
     notifStore.connectSSE()
   }
 
-  // Set CSS vars for actual heights of nav elements
+  window.addEventListener('resize', onResize)
+
   const tabBar = document.querySelector('.feed-tab-bar') as HTMLElement || document.querySelector('[class*="feed-tab-bar"]') as HTMLElement
   const bottomNav = document.querySelector('.bottom-nav') as HTMLElement
   if (tabBar) {
@@ -100,6 +101,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('resize', onResize)
 })
 
 const getActivePlayer = () => {
@@ -152,22 +154,6 @@ const onKeyDown = (e: KeyboardEvent) => {
   }
 }
 
-const handleViewReported = async (token?: string) => {
-  if (!token) return
-  try {
-    await videoService.recordView(token)
-    // Invalidate token after successful report
-    playToken.value = null
-  } catch {}
-}
-
-const handleCompletionReported = async (token?: string) => {
-  if (!token) return
-  try {
-    await videoService.recordView(token)
-    playToken.value = null
-  } catch {}
-}
 </script>
 
 <template>
@@ -183,31 +169,16 @@ const handleCompletionReported = async (token?: string) => {
         @reachEnd="feedStore.loadMore(activeTab)"
       >
         <template #default="{ item, active }">
-          <VideoPlayer
-            :src="item?.play_url ?? ''"
-            :poster="item?.cover_url ?? ''"
+          <FeedSlideContent
+            :item="item"
+            :active="active"
             :muted="isMuted"
-            :autoPlay="active"
-            :width="item?.width"
-            :height="item?.height"
-            :duration="item?.duration"
-            :playToken="item?.play_token"
-            :videoId="item?.video_id"
-            @viewReported="handleViewReported(item?.play_token)"
-            @completionReported="handleCompletionReported(item?.play_token)"
+            @openComments="(videoId) => { commentVideoId = videoId; commentDrawerOpen = true }"
           />
-          <div class="slide-overlay-author">
-            <SlideAuthorBar :item="item" />
-          </div>
-          <div class="slide-overlay-info">
-            <SlideInfoBar :item="item" />
-          </div>
-          <div class="slide-overlay-actions">
-            <SlideActionBar :item="item" @openComments="(videoId) => { commentVideoId = videoId; commentDrawerOpen = true }" />
-          </div>
-          <div class="slide-debug">slide {{ item?.video_id }} {{ active ? '(ACTIVE)' : '' }}</div>
         </template>
       </FeedSwiper>
+
+      <BottomNav v-if="isMobile" />
     </div>
 
     <CommentDrawer
@@ -235,42 +206,9 @@ const handleCompletionReported = async (token?: string) => {
   flex: 1;
   overflow: hidden;
   position: relative;
-  // On narrow screens the sidebar becomes a bottom nav (fixed), needs padding
+  // Reserve space for bottom nav on mobile so swiper content doesn't hide behind it
   @media (max-width: 1023px) {
-    padding-bottom: var(--bottom-nav-height);
+    padding-bottom: var(--bottom-nav-height, 60px);
   }
-}
-
-.slide-debug {
-  position: absolute;
-  top: 40px;
-  left: 4px;
-  background: rgba(0,0,0,0.6);
-  color: #0f0;
-  font-size: 11px;
-  z-index: 99;
-  pointer-events: none;
-}
-
-.slide-overlay-author {
-  position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
-  z-index: 2;
-}
-
-.slide-overlay-info {
-  position: absolute;
-  bottom: 80px;
-  left: 0;
-  right: 80px;
-  z-index: 2;
-}
-
-.slide-overlay-actions {
-  position: absolute;
-  right: var(--space-4);
-  bottom: 100px;
-  z-index: 2;
 }
 </style>
