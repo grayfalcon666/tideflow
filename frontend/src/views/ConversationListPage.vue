@@ -31,6 +31,9 @@ onMounted(() => {
   <div class="conv-list-page">
     <div class="page-header">
       <h2>私信</h2>
+      <div class="header-actions">
+        <TFIcon name="notifications" :size="22" @click="router.push('/notifications')" class="action-icon" />
+      </div>
     </div>
 
     <div v-if="!msgStore.conversations.length" class="empty-state">
@@ -73,7 +76,23 @@ onMounted(() => {
 }
 
 .page-header {
-  h2 { font-size: 20px; margin-bottom: var(--space-4); }
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-4);
+  h2 { flex: 1; font-size: 20px; }
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.action-icon {
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: var(--space-1);
+  &:hover { color: var(--text-base); }
 }
 
 .empty-state {

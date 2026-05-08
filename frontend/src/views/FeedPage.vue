@@ -160,7 +160,7 @@ const onKeyDown = (e: KeyboardEvent) => {
   <div class="feed-page">
     <FeedTabBar :activeTab="activeTab" @update:tab="onTabChange" />
 
-    <div class="feed-swiper-wrap">
+    <div class="feed-swiper-wrap" :class="{ 'compressed': commentDrawerOpen }">
       <FeedSwiper
         ref="swiperRef"
         :items="items"
@@ -209,6 +209,11 @@ const onKeyDown = (e: KeyboardEvent) => {
   // Reserve space for bottom nav on mobile so swiper content doesn't hide behind it
   @media (max-width: 1023px) {
     padding-bottom: var(--bottom-nav-height, 60px);
+  }
+
+  &.compressed {
+    width: 70%;
+    transition: width 0.3s ease;
   }
 }
 </style>

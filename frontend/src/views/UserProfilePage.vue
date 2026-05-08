@@ -67,7 +67,11 @@ onMounted(() => fetchProfile())
     </div>
 
     <template v-else-if="profile">
-      <UserInfoCard :user="profile" :isMe="isMe" />
+      <UserInfoCard
+        :user="profile"
+        :isMe="isMe"
+        @updated="() => authStore.fetchMe()"
+      />
 
       <div v-if="!isMe" class="profile-follow-btn">
         <FollowButton v-if="userId !== null" :userId="userId" />

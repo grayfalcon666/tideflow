@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import * as messageService from '../services/message'
@@ -11,6 +11,15 @@ const router = useRouter()
 const authStore = useAuthStore()
 const peerId = Number(route.params.peerId)
 
+const normalizeMessage = (m: any): Message => ({
+  id: m.id,
+  from_id: m.from_id,
+  to_id: m.to_id,
+  content: m.content,
+  created_at: typeof m.created_at === 'string' ? new Date(m.created_at).getTime() / 1000 : m.created_at,
+  is_read: m.is_read,
+})
+
 const messages = ref<Message[]>([])
 const nextCursor = ref<string | null>(null)
 const hasMore = ref(true)
@@ -18,6 +27,7 @@ const loading = ref(false)
 const sending = ref(false)
 const inputText = ref('')
 const listEl = ref<HTMLElement>()
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const fetchMessages = async (cursor?: string) => {
   loading.value = true
@@ -25,10 +35,12 @@ const fetchMessages = async (cursor?: string) => {
     const resp = await messageService.getMessages(peerId, cursor)
     const d = resp.data.data
     if (!d) return
+    // 后端返回 newest first，翻转成 oldest first（底部最新）
+    const normalized = ((d.items ?? []) as any[]).map(normalizeMessage).reverse()
     if (cursor) {
-      messages.value.unshift(...(d.items ?? []))
+      messages.value.unshift(...normalized)
     } else {
-      messages.value = d.items ?? []
+      messages.value = normalized
     }
     nextCursor.value = d.next_cursor
     hasMore.value = d.has_more ?? false
@@ -46,7 +58,7 @@ const send = async () => {
     const resp = await messageService.sendMessage(peerId, content)
     const m = resp.data.data
     if (m) {
-      messages.value.push(m)
+      messages.value.push(normalizeMessage(m))
       scrollToBottom()
     } else {
       inputText.value = content
@@ -69,9 +81,16 @@ onMounted(async () => {
   await messageService.markRead(peerId)
   scrollToBottom()
   // Poll every 5s
-  setInterval(async () => {
+  pollTimer = setInterval(async () => {
     await fetchMessages()
   }, 5000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
 })
 
 const isMine = (m: Message) => m.from_id === authStore.accountId

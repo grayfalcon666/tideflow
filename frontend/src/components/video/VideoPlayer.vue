@@ -39,6 +39,13 @@ const isMuted = ref(props.muted ?? true)
 const showPoster = ref(true)
 const showPlayIndicator = ref(false)
 const showMuteState = ref(false)
+const showVolumeSlider = ref(false)
+const volume = ref(1)
+
+// Seek preview
+const showSeekIndicator = ref(false)
+const seekDelta = ref(0)
+const seekIndicatorText = ref('')
 
 // Progress / controls
 const duration = ref(0)
@@ -111,6 +118,7 @@ const togglePlay = () => {
 }
 
 const handleClick = () => {
+  if (isDragging) return
   if (clickTimer) {
     clearTimeout(clickTimer)
     clickTimer = null
@@ -151,6 +159,18 @@ const toggleMute = () => {
   isMuted.value = !isMuted.value
   if (videoEl.value) videoEl.value.muted = isMuted.value
   showMuteIndicator()
+  showVolumeSlider.value = !showVolumeSlider.value
+  resetHideTimer()
+}
+
+const handleVolumeChange = (e: Event) => {
+  const val = parseFloat((e.target as HTMLInputElement).value)
+  volume.value = val
+  if (videoEl.value) {
+    videoEl.value.volume = val
+    videoEl.value.muted = val === 0
+    isMuted.value = val === 0
+  }
   resetHideTimer()
 }
 
@@ -167,6 +187,55 @@ defineExpose({
     }
   },
 })
+
+// Mobile seek: horizontal swipe to fast-forward/rewind
+let seekStartX = 0
+let seekStartTime = 0
+let isDragging = false
+let seekTouchStartY = 0
+
+const handleTouchStart = (e: TouchEvent) => {
+  seekStartX = e.touches[0].clientX
+  seekStartTime = videoEl.value?.currentTime ?? 0
+  isDragging = false
+  seekTouchStartY = e.touches[0].clientY
+}
+
+const handleTouchMove = (e: TouchEvent) => {
+  if (!duration.value) return
+  const dx = e.touches[0].clientX - seekStartX
+  const dy = e.touches[0].clientY - seekTouchStartY
+  // If it's more vertical than horizontal, skip seek
+  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) return
+  if (Math.abs(dx) > 10) {
+    isDragging = true
+    // Stop the event from reaching the progress bar input
+    e.preventDefault()
+  }
+  // 1px = 0.5s of seek
+  const delta = Math.round(dx * 0.5)
+  seekDelta.value = delta
+  const newTime = Math.max(0, Math.min(seekStartTime + delta, duration.value))
+  const pct = ((newTime / duration.value) * 100).toFixed(1)
+  seekIndicatorText.value = `${delta >= 0 ? '+' : ''}${delta}s · ${pct}%`
+  if (delta !== 0) {
+    showSeekIndicator.value = true
+    showPlayIndicator.value = false
+  }
+}
+
+const handleTouchEnd = () => {
+  if (seekDelta.value !== 0 && videoEl.value) {
+    const newTime = Math.max(0, Math.min(seekStartTime + seekDelta.value, duration.value))
+    videoEl.value.currentTime = newTime
+    currentTime.value = newTime
+    resetHideTimer()
+  }
+  seekDelta.value = 0
+  showSeekIndicator.value = false
+  // Reset isDragging after a tick so click handler can't accidentally fire
+  setTimeout(() => { isDragging = false }, 0)
+}
 
 watch(
   () => [props.src, props.autoPlay] as const,
@@ -200,6 +269,7 @@ onMounted(() => {
   if (video) {
     video.addEventListener('loadedmetadata', () => {
       duration.value = video.duration
+      volume.value = video.volume
     })
     video.addEventListener('timeupdate', () => {
       currentTime.value = video.currentTime
@@ -252,8 +322,10 @@ onUnmounted(() => {
   <div
     ref="videoContainerRef"
     class="video-player"
-    :style="{ aspectRatio: cssAspectRatio }"
-    @click="handleClick"
+    :style="{ aspectRatio: '16 / 9' }"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
     @mouseenter="showControls = true"
     @mouseleave="isPlaying && (showControls = false)"
   >
@@ -273,8 +345,19 @@ onUnmounted(() => {
     <img v-if="showPoster && poster" :src="poster" class="poster-img" alt="cover" />
     <div v-if="showPoster && !poster" class="poster-placeholder"></div>
 
+    <!-- Center tap zone for play/pause — does not block swipe gestures -->
+    <div class="tap-zone" @click.stop="handleClick" />
+
     <transition name="fade">
-      <div v-if="showPlayIndicator" class="play-indicator">
+      <div v-if="showSeekIndicator" class="play-indicator">
+        <div class="play-icon-inner seek-indicator-text">
+          {{ seekIndicatorText }}
+        </div>
+      </div>
+    </transition>
+
+    <transition name="fade">
+      <div v-if="showPlayIndicator && !showSeekIndicator" class="play-indicator">
         <div class="play-icon-inner">
           <svg v-if="showMuteState && isMuted" width="40" height="40" viewBox="0 0 24 24" fill="currentColor">
             <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
@@ -322,14 +405,27 @@ onUnmounted(() => {
             />
           </div>
 
-          <button class="ctrl-btn" @click.stop="toggleMute">
-            <svg v-if="isMuted" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-            </svg>
-            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-            </svg>
-          </button>
+          <div class="volume-control" @click.stop>
+            <button class="ctrl-btn" @click.stop="toggleMute">
+              <svg v-if="isMuted || volume === 0" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+              </svg>
+              <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+              </svg>
+            </button>
+            <div class="volume-slider-wrap">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.02"
+                :value="isMuted ? 0 : volume"
+                class="volume-slider"
+                @input="handleVolumeChange"
+              />
+            </div>
+          </div>
 
           <button class="ctrl-btn" @click.stop="toggleFullscreen">
             <svg v-if="!isFullscreen" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -406,6 +502,15 @@ onUnmounted(() => {
   background: #1a1a1a;
 }
 
+.tap-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  cursor: pointer;
+  /* Center region only — top/bottom 30% reserved for controls and swipe */
+  clip-path: inset(25% 20%);
+}
+
 .play-indicator {
   position: absolute;
   inset: 0;
@@ -424,6 +529,16 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   color: #fff;
+}
+
+.seek-indicator-text {
+  width: auto;
+  height: auto;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 // Controls bar
@@ -505,6 +620,54 @@ onUnmounted(() => {
   &::-webkit-slider-runnable-track {
     background: transparent;
     height: 4px;
+  }
+}
+
+// Volume slider
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.volume-slider-wrap {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.2s;
+
+  .volume-control:hover &,
+  .volume-control:focus-within & {
+    width: 70px;
+  }
+}
+
+.volume-slider {
+  width: 70px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  &::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+    border: none;
   }
 }
 

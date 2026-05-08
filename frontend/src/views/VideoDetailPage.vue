@@ -83,22 +83,20 @@ onMounted(async () => {
     <template v-else-if="video">
       <VideoDetailHeader :title="video.title" @back="router.back()" />
 
-      <VideoPlayerContainer>
-        <template #default="{ videoId: containerVideoId }">
-          <VideoPlayer
-            :src="video.play_url"
-            :poster="video.cover_url"
-            :muted="isMuted"
-            :autoPlay="true"
-            :width="video.width"
-            :height="video.height"
-            :duration="video.duration"
-            :playToken="video.play_token"
-            :videoId="containerVideoId ?? videoId"
-            @viewReported="handleViewReported(video.play_token)"
-            @completionReported="handleCompletionReported(video.play_token)"
-          />
-        </template>
+      <VideoPlayerContainer :fixedRatio="true">
+        <VideoPlayer
+          :src="video.play_url"
+          :poster="video.cover_url"
+          :muted="isMuted"
+          :autoPlay="true"
+          :width="video.width"
+          :height="video.height"
+          :duration="video.duration"
+          :playToken="video.play_token"
+          :videoId="videoId"
+          @viewReported="handleViewReported(video.play_token)"
+          @completionReported="handleCompletionReported(video.play_token)"
+        />
       </VideoPlayerContainer>
 
       <VideoMetaSection :video="video" />
