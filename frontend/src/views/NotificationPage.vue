@@ -33,8 +33,8 @@ const notifColor = (type: string) => {
 
 const handleNotifClick = (n: Notification) => {
   if (n.type === 'follow') {
-    router.push(`/u/${n.sender.id}`)
-  } else {
+    if (n.sender) router.push(`/u/${n.sender.id}`)
+  } else if (n.target_id) {
     router.push(`/video/${n.target_id}`)
   }
   if (!n.is_read) {

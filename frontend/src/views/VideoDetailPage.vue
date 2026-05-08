@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import VideoPlayer from '../components/video/VideoPlayer.vue'
+import VideoPlayerContainer from '../components/video/VideoPlayerContainer.vue'
 import VideoDetailHeader from '../components/video/VideoDetailHeader.vue'
 import VideoMetaSection from '../components/video/VideoMetaSection.vue'
 import VideoCommentPreview from '../components/video/VideoCommentPreview.vue'
@@ -82,21 +83,23 @@ onMounted(async () => {
     <template v-else-if="video">
       <VideoDetailHeader :title="video.title" @back="router.back()" />
 
-      <div class="video-player-wrap">
-        <VideoPlayer
-          :src="video.play_url"
-          :poster="video.cover_url"
-          :muted="isMuted"
-          :autoPlay="true"
-          :width="video.width"
-          :height="video.height"
-          :duration="video.duration"
-          :playToken="video.play_token"
-          :videoId="videoId"
-          @viewReported="handleViewReported(video.play_token)"
-          @completionReported="handleCompletionReported(video.play_token)"
-        />
-      </div>
+      <VideoPlayerContainer>
+        <template #default="{ videoId: containerVideoId }">
+          <VideoPlayer
+            :src="video.play_url"
+            :poster="video.cover_url"
+            :muted="isMuted"
+            :autoPlay="true"
+            :width="video.width"
+            :height="video.height"
+            :duration="video.duration"
+            :playToken="video.play_token"
+            :videoId="containerVideoId ?? videoId"
+            @viewReported="handleViewReported(video.play_token)"
+            @completionReported="handleCompletionReported(video.play_token)"
+          />
+        </template>
+      </VideoPlayerContainer>
 
       <VideoMetaSection :video="video" />
 
@@ -117,6 +120,9 @@ onMounted(async () => {
 <style scoped lang="scss">
 .video-detail-page {
   min-height: 100svh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-base);
 }
 
@@ -129,12 +135,5 @@ onMounted(async () => {
   min-height: 60svh;
   gap: var(--space-4);
   color: var(--text-secondary);
-}
-
-.video-player-wrap {
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  background: #000;
 }
 </style>
