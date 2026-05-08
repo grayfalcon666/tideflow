@@ -51,36 +51,16 @@ let indicatorTimer: ReturnType<typeof setTimeout> | null = null
 // Fullscreen
 const isFullscreen = ref(false)
 
-// Aspect ratio from metadata (fallback to props)
-const aspectRatio = computed(() => {
+// Aspect ratio for CSS aspect-ratio property
+const cssAspectRatio = computed(() => {
   if (props.width && props.height && props.width > 0 && props.height > 0) {
-    return props.width / props.height
+    return `${props.width} / ${props.height}`
   }
-  return 16 / 9 // default
-})
-
-const containerStyle = computed(() => {
-  if (props.width && props.height) {
-    return { aspectRatio: `${props.width} / ${props.height}` }
-  }
-  return {}
+  return '16 / 9' // default
 })
 
 // Show skeleton until video first frame or poster loads
 const showSkeleton = ref(true)
-
-// Video style: mobile landscape -> contain, otherwise cover
-const videoStyle = ref<{ width: string; height: string; objectFit: 'cover' | 'contain' }>({ width: '100%', height: '100%', objectFit: 'cover' })
-
-const applyVideoStyle = (video: HTMLVideoElement) => {
-  const isMobile = window.innerWidth < 1024
-  const isLandscape = video.videoWidth > video.videoHeight
-  if (isMobile && isLandscape) {
-    videoStyle.value = { width: '100%', height: 'auto', objectFit: 'contain' as const }
-  } else {
-    videoStyle.value = { width: '100%', height: '100%', objectFit: 'cover' }
-  }
-}
 
 const resetHideTimer = () => {
   showControls.value = true
@@ -220,7 +200,6 @@ onMounted(() => {
   if (video) {
     video.addEventListener('loadedmetadata', () => {
       duration.value = video.duration
-      applyVideoStyle(video)
     })
     video.addEventListener('timeupdate', () => {
       currentTime.value = video.currentTime
@@ -273,7 +252,7 @@ onUnmounted(() => {
   <div
     ref="videoContainerRef"
     class="video-player"
-    :style="containerStyle"
+    :style="{ aspectRatio: cssAspectRatio }"
     @click="handleClick"
     @mouseenter="showControls = true"
     @mouseleave="isPlaying && (showControls = false)"
@@ -289,10 +268,7 @@ onUnmounted(() => {
       :poster="poster"
       :muted="isMuted"
       :playsinline="true"
-      webkit-playsinline="true"
-      x5-video-player-type="h5"
       class="video-el"
-      :style="videoStyle"
     />
     <img v-if="showPoster && poster" :src="poster" class="poster-img" alt="cover" />
     <div v-if="showPoster && !poster" class="poster-placeholder"></div>
@@ -412,7 +388,7 @@ onUnmounted(() => {
 .video-el {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .poster-img {
@@ -420,7 +396,8 @@ onUnmounted(() => {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: #000;
 }
 
 .poster-placeholder {

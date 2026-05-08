@@ -18,14 +18,18 @@ const currentRoute = computed(() => router.currentRoute.value.path)
 // Bottom nav visible on these routes
 const bottomNavRoutes = ['/', '/hot', '/messages']
 const showBottomNav = computed(() => {
-  if (isMobile.value && bottomNavRoutes.some(r => currentRoute.value === r)) return true
-  if (isMobile.value && currentRoute.value.startsWith('/u/')) return true
+  if (!isMobile.value) return false
+  // FeedPage renders its own BottomNav, skip here
+  if (currentRoute.value === '/') return false
+  // HotPage and UserPage use the App-level one
+  if (['/hot', '/messages'].some(r => currentRoute.value === r)) return true
+  if (currentRoute.value.startsWith('/u/')) return true
   return false
 })
 
 // Video detail / upload / account / register / 404 — hide nav & sidebar
 const hideLayout = computed(() =>
-  ['/video/', '/upload', '/account', '/register'].some(p => currentRoute.value.startsWith(p)) ||
+  ['/upload', '/account', '/register'].some(p => currentRoute.value.startsWith(p)) ||
   currentRoute.value === '/:catchAll(.*)' ||
   currentRoute.value.includes('messages/')
 )
@@ -51,10 +55,11 @@ onMounted(() => {
         'sidebar-collapsed': !isMobile && !hideLayout && layoutStore.sidebarCollapsed,
       }"
     >
-      <router-view :key="$route.fullPath" />
+      <router-view :key="$route.fullPath" class="router-view" />
     </main>
 
-    <BottomNav v-if="showBottomNav && !hideLayout" />
+    <!-- BottomNav: FeedPage renders its own, HotPage/UserPage use this one -->
+    <BottomNav v-if="showBottomNav" />
   </div>
 </template>
 
@@ -62,16 +67,17 @@ onMounted(() => {
 .tideflow-app {
   display: flex;
   min-height: 100svh;
+  width: 100%;
   background: var(--bg-base);
 }
 
 .main-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   min-height: 100svh;
-  width: 100%;
   transition: margin-left var(--transition-normal);
 
   &.with-sidebar {
@@ -81,5 +87,9 @@ onMounted(() => {
   &.sidebar-collapsed {
     margin-left: var(--sidebar-width-collapsed);
   }
+}
+
+.router-view {
+  width: 100%;
 }
 </style>
