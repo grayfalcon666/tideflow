@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { VideoItem } from '../../types'
 import * as videoService from '../../services/video'
+import { useInteractionStore } from '../../stores/interaction'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
@@ -10,14 +11,15 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
-const liked = ref(props.item.is_liked)
+const interactionStore = useInteractionStore()
+const liked = computed(() => interactionStore.isLiked(props.item.video_id))
 const likesCount = ref(props.item.likes_count)
 
 const toggleLike = async (e: Event) => {
   e.stopPropagation()
-  // Optimistic update
   const wasLiked = liked.value
-  liked.value = !wasLiked
+  liked.value // computed ref access
+  interactionStore.toggleLike(props.item.video_id)
   likesCount.value += wasLiked ? -1 : 1
   try {
     if (wasLiked) {
@@ -26,7 +28,7 @@ const toggleLike = async (e: Event) => {
       await videoService.likeVideo(props.item.video_id)
     }
   } catch {
-    liked.value = wasLiked
+    interactionStore.toggleLike(props.item.video_id)
     likesCount.value += wasLiked ? 1 : -1
   }
 }

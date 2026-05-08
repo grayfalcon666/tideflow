@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import type { VideoItem } from '../../types'
 import * as userService from '../../services/user'
 import { useAuthStore } from '../../stores/auth'
+import { useInteractionStore } from '../../stores/interaction'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
@@ -12,7 +13,8 @@ const props = defineProps<{
 
 const router = useRouter()
 const authStore = useAuthStore()
-const isFollowing = ref(false)
+const interactionStore = useInteractionStore()
+const isFollowing = computed(() => interactionStore.isFollowing(props.item.author.id))
 const isMe = computed(() => authStore.accountId === props.item.author.id)
 
 const toggleFollow = async () => {
@@ -22,7 +24,7 @@ const toggleFollow = async () => {
   }
   if (isMe.value) return
   const was = isFollowing.value
-  isFollowing.value = !was
+  interactionStore.toggleFollow(props.item.author.id)
   try {
     if (was) {
       await userService.unfollow(props.item.author.id)
@@ -30,7 +32,7 @@ const toggleFollow = async () => {
       await userService.follow(props.item.author.id)
     }
   } catch {
-    isFollowing.value = was
+    interactionStore.toggleFollow(props.item.author.id)
   }
 }
 

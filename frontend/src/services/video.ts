@@ -17,7 +17,7 @@ export const unlikeVideo = (id: number) =>
   api.delete<ApiResponse<{ likes_count: number }>>(`/videos/${id}/like`)
 
 export const getMyLiked = (cursor?: string, limit = 10) =>
-  api.get<ApiResponse<{ items: VideoItem[]; next_cursor: string | null; has_more: boolean }>>(
+  api.get<ApiResponse<{ items: VideoItem[] & { id: number }[]; next_cursor: string | null; has_more: boolean }>>(
     '/likes/mine',
     { params: { cursor, limit } }
   )

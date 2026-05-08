@@ -26,5 +26,10 @@ export const useMessageStore = defineStore('message', () => {
     totalUnread.value = items.reduce((sum, c) => sum + (c.unread_count || 0), 0)
   }
 
-  return { conversations, totalUnread, fetchConversations }
+  const reset = () => {
+    conversations.value = []
+    totalUnread.value = 0
+  }
+
+  return { conversations, totalUnread, fetchConversations, reset }
 })

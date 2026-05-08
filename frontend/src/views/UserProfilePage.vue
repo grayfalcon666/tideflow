@@ -70,7 +70,7 @@ onMounted(() => fetchProfile())
       <UserInfoCard :user="profile" :isMe="isMe" />
 
       <div v-if="!isMe" class="profile-follow-btn">
-        <FollowButton v-if="userId !== null" :userId="userId" :initialFollowing="profile.is_following" />
+        <FollowButton v-if="userId !== null" :userId="userId" />
       </div>
 
       <div class="user-tabs">

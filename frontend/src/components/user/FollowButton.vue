@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
 import * as userService from '../../services/user'
+import { useInteractionStore } from '../../stores/interaction'
 
 const props = defineProps<{
   userId: number
-  initialFollowing: boolean
 }>()
 
-const following = ref(props.initialFollowing)
+const interactionStore = useInteractionStore()
+const following = computed(() => interactionStore.isFollowing(props.userId))
 
 const toggle = async () => {
   const was = following.value
-  following.value = !was
+  interactionStore.toggleFollow(props.userId)
   try {
     if (was) {
       await userService.unfollow(props.userId)
@@ -19,7 +20,7 @@ const toggle = async () => {
       await userService.follow(props.userId)
     }
   } catch {
-    following.value = was
+    interactionStore.toggleFollow(props.userId)
   }
 }
 </script>

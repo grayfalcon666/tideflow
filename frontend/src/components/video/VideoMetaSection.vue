@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { VideoDetail } from '../../types'
 import * as videoService from '../../services/video'
 import * as userService from '../../services/user'
 import { useAuthStore } from '../../stores/auth'
+import { useInteractionStore } from '../../stores/interaction'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
@@ -13,9 +14,10 @@ const props = defineProps<{
 
 const router = useRouter()
 const authStore = useAuthStore()
-const liked = ref(props.video.is_liked)
+const interactionStore = useInteractionStore()
+const liked = computed(() => interactionStore.isLiked(props.video.video_id))
 const likesCount = ref(props.video.likes_count)
-const following = ref(props.video.is_following_author)
+const following = computed(() => interactionStore.isFollowing(props.video.author.id))
 
 const isMe = () => authStore.accountId === props.video.author.id
 
@@ -25,7 +27,7 @@ const toggleLike = async () => {
     return
   }
   const was = liked.value
-  liked.value = !was
+  interactionStore.toggleLike(props.video.video_id)
   likesCount.value += was ? -1 : 1
   try {
     if (was) {
@@ -36,7 +38,7 @@ const toggleLike = async () => {
       likesCount.value = r.data.data!.likes_count
     }
   } catch {
-    liked.value = was
+    interactionStore.toggleLike(props.video.video_id)
     likesCount.value += was ? 1 : -1
   }
 }
@@ -48,7 +50,7 @@ const toggleFollow = async () => {
   }
   if (isMe()) return
   const was = following.value
-  following.value = !was
+  interactionStore.toggleFollow(props.video.author.id)
   try {
     if (was) {
       await userService.unfollow(props.video.author.id)
@@ -56,7 +58,7 @@ const toggleFollow = async () => {
       await userService.follow(props.video.author.id)
     }
   } catch {
-    following.value = was
+    interactionStore.toggleFollow(props.video.author.id)
   }
 }
 

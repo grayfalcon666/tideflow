@@ -4,6 +4,9 @@ import type { Router } from 'vue-router'
 import type { UserInfo } from '../types'
 import * as authService from '../services/auth'
 import * as userService from '../services/user'
+import { useInteractionStore } from './interaction'
+import { useNotificationStore } from './notification'
+import { useMessageStore } from './message'
 
 export const useAuthStore = defineStore('auth', () => {
   const accountId = ref<number | null>(null)
@@ -43,6 +46,12 @@ export const useAuthStore = defineStore('auth', () => {
     followerCount.value = 0
     initialized.value = false
     localStorage.removeItem('tideflow_refresh_token')
+
+    // 清空其他 store
+    useInteractionStore().reset()
+    useNotificationStore().reset()
+    useMessageStore().reset()
+
     if (router) router.push('/account')
   }
 

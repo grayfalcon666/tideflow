@@ -51,7 +51,7 @@ onMounted(() => {
         'sidebar-collapsed': !isMobile && !hideLayout && layoutStore.sidebarCollapsed,
       }"
     >
-      <router-view />
+      <router-view :key="$route.fullPath" />
     </main>
 
     <BottomNav v-if="showBottomNav && !hideLayout" />

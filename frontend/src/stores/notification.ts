@@ -92,6 +92,12 @@ export const useNotificationStore = defineStore('notification', () => {
     unreadCount.value = 0
   }
 
+  const reset = () => {
+    notifications.value = []
+    unreadCount.value = 0
+    disconnectSSE()
+  }
+
   // Visibility change: reconnect on visible
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
@@ -108,6 +114,6 @@ export const useNotificationStore = defineStore('notification', () => {
   return {
     notifications, unreadCount, connected,
     connectSSE, disconnectSSE,
-    fetchNotifications, markRead, markAllRead,
+    fetchNotifications, markRead, markAllRead, reset,
   }
 })
