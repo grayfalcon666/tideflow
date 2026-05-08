@@ -100,9 +100,26 @@ export interface PopularReq {
 }
 
 // ============ Comment ============
+export type RawComment = {
+  id: number
+  author_id: number
+  username: string
+  avatar_url?: string
+  content: string
+  created_at: string
+  like_count: number
+  reply_count: number
+  is_liked: boolean
+  is_mine: boolean
+  root_id: number
+  parent_id: number
+  replies?: RawComment[]
+}
+
 export interface Comment {
   comment_id: number
   user_id: number
+  author_id: number
   username: string
   avatar_url: string
   content: string
@@ -113,10 +130,30 @@ export interface Comment {
   is_mine: boolean
   root_id: number
   parent_id: number
+  replies?: Comment[]
+  showReplies?: boolean
 }
 
-export interface CommentListResp {
-  items: Comment[]
+export const normalizeComment = (c: RawComment): Comment => ({
+  comment_id: c.id,
+  user_id: c.author_id,
+  author_id: c.author_id,
+  username: c.username,
+  avatar_url: c.avatar_url ?? '',
+  content: c.content,
+  created_at: new Date(c.created_at).getTime() / 1000,
+  like_count: c.like_count,
+  reply_count: c.reply_count,
+  is_liked: c.is_liked,
+  is_mine: c.is_mine,
+  root_id: c.root_id,
+  parent_id: c.parent_id,
+  replies: c.replies?.map(normalizeComment),
+  showReplies: false,
+})
+
+export type CommentListResp = {
+  items: RawComment[]
   next_cursor: string | null
   has_more: boolean
 }

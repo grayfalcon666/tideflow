@@ -30,9 +30,17 @@ export const useInteractionStore = defineStore('interaction', () => {
     localStorage.removeItem('tideflow-interaction')
   }
 
+  const syncLike = (videoId: number) => {
+    likedVideoIds.value.add(videoId)
+  }
+
+  const syncFollow = (userId: number) => {
+    followingUserIds.value.add(userId)
+  }
+
   return {
     likedVideoIds, followingUserIds,
-    isLiked, isFollowing, toggleLike, toggleFollow, reset,
+    isLiked, isFollowing, toggleLike, toggleFollow, reset, syncLike, syncFollow,
   }
 }, {
   persist: {

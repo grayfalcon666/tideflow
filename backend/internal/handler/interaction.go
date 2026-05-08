@@ -176,13 +176,23 @@ func (h *InteractionHandler) PublishComment(c *gin.Context) {
 		uname = u
 	}
 
-	commentID, err := h.interaction.PublishComment(c.Request.Context(), uint(videoID), userID, uname, req.Content, req.ParentID, req.RootID)
+	comment, err := h.interaction.PublishComment(c.Request.Context(), uint(videoID), userID, uname, req.Content, req.ParentID, req.RootID)
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
 
-	response.Created(c, gin.H{"comment_id": commentID})
+	cwb := &service.CommentWithReplies{
+		ID:         comment.ID,
+		AuthorID:   comment.AuthorID,
+		Username:   comment.Username,
+		Content:    comment.Content,
+		ParentID:   comment.ParentID,
+		RootID:     comment.RootID,
+		CreatedAt:  comment.CreatedAt,
+		ReplyCount: 0,
+	}
+	response.Created(c, cwb)
 }
 
 // @Summary 删除评论

@@ -242,6 +242,15 @@ func (r *Repository) CountReplies(ctx context.Context, rootID uint) (int64, erro
 	return count, err
 }
 
+func (r *Repository) GetRepliesByRootIDs(ctx context.Context, rootIDs []uint) ([]*models.Comment, error) {
+	var replies []*models.Comment
+	err := r.db.WithContext(ctx).
+		Where("root_id IN ? AND deleted_at IS NULL", rootIDs).
+		Order("created_at ASC").
+		Find(&replies).Error
+	return replies, err
+}
+
 func (r *Repository) SoftDeleteComment(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Model(&models.Comment{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
 }

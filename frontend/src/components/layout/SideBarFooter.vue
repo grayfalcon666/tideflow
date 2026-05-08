@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useLayoutStore } from '../../stores/layout'
+import TFIcon from '../common/TFIcon.vue'
 
 defineProps<{ onToggle: () => void }>()
 

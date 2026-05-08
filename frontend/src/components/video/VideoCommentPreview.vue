@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import * as commentService from '../../services/comment'
 import type { Comment } from '../../types'
+import { normalizeComment } from '../../types'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
@@ -18,7 +19,7 @@ const fetchPreview = async () => {
   try {
     const resp = await commentService.getComments(props.videoId, 0, undefined, 3)
     const d = resp.data.data
-    comments.value = d?.items ?? []
+    comments.value = (d?.items ?? []).map(normalizeComment)
   } finally {
     loading.value = false
   }

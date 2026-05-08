@@ -1,5 +1,5 @@
 import api from './api'
-import type { ApiResponse, Comment, CommentListResp } from '../types'
+import type { ApiResponse, Comment, CommentListResp, RawComment } from '../types'
 
 export const getComments = (videoId: number, rootId = 0, cursor?: string, limit = 20) =>
   api.get<ApiResponse<CommentListResp>>(`/videos/${videoId}/comments`, {
@@ -12,7 +12,7 @@ export const postComment = (
   rootId: number,
   parentId: number
 ) =>
-  api.post<ApiResponse<Comment>>(`/videos/${videoId}/comments`, {
+  api.post<ApiResponse<RawComment>>(`/videos/${videoId}/comments`, {
     content,
     root_id: rootId,
     parent_id: parentId,

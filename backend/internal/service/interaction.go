@@ -159,7 +159,7 @@ func parseCursorInt64(s string) (int64, error) {
 	return v, nil
 }
 
-func (s *InteractionService) PublishComment(ctx context.Context, videoID, authorID uint, username, content string, parentID, rootID uint) (uint, error) {
+func (s *InteractionService) PublishComment(ctx context.Context, videoID, authorID uint, username, content string, parentID, rootID uint) (*models.Comment, error) {
 	comment := &models.Comment{
 		VideoID:   videoID,
 		AuthorID:  authorID,
@@ -170,7 +170,7 @@ func (s *InteractionService) PublishComment(ctx context.Context, videoID, author
 		CreatedAt: time.Now(),
 	}
 	if err := s.repo.CreateComment(ctx, comment); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	// 发布评论事件，CommentWorker 消费：写入 comments 表
@@ -195,7 +195,7 @@ func (s *InteractionService) PublishComment(ctx context.Context, videoID, author
 	}
 	s.mq.Publish(ctx, "video.popularity.events", "video.popularity.update", popEvent)
 
-	return comment.ID, nil
+	return comment, nil
 }
 
 func (s *InteractionService) DeleteComment(ctx context.Context, commentID, authorID uint) error {
@@ -264,6 +264,33 @@ func (s *InteractionService) GetComments(ctx context.Context, videoID uint, root
 		}
 	}
 
+	// root_id=0 时一次性加载所有根评论的子评论，嵌入到 Replies 字段
+	if rootID == 0 && len(comments) > 0 {
+		rootIDs := make([]uint, len(comments))
+		for i, c := range comments {
+			rootIDs[i] = c.ID
+		}
+		replies, _ := s.repo.GetRepliesByRootIDs(ctx, rootIDs)
+		replyMap := make(map[uint][]*CommentWithReplies)
+		for _, r := range replies {
+			replyMap[r.RootID] = append(replyMap[r.RootID], &CommentWithReplies{
+				ID:         r.ID,
+				AuthorID:   r.AuthorID,
+				Username:   r.Username,
+				Content:    r.Content,
+				ParentID:   r.ParentID,
+				RootID:     r.RootID,
+				CreatedAt:  r.CreatedAt,
+				ReplyCount: 0,
+			})
+		}
+		for _, c := range result {
+			if repls, ok := replyMap[c.ID]; ok {
+				c.Replies = repls
+			}
+		}
+	}
+
 	var nextCursor *string
 	if hasMore && len(comments) > 0 {
 		nc := strconv.FormatInt(comments[len(comments)-1].CreatedAt.UnixMilli(), 10)
@@ -274,12 +301,13 @@ func (s *InteractionService) GetComments(ctx context.Context, videoID uint, root
 }
 
 type CommentWithReplies struct {
-	ID         uint      `json:"id"`
-	AuthorID   uint      `json:"author_id"`
-	Username   string    `json:"username"`
-	Content    string    `json:"content"`
-	ParentID   uint      `json:"parent_id"`
-	RootID     uint      `json:"root_id"`
-	CreatedAt  time.Time `json:"created_at"`
-	ReplyCount int       `json:"reply_count"`
+	ID         uint                `json:"id"`
+	AuthorID   uint                `json:"author_id"`
+	Username   string              `json:"username"`
+	Content    string              `json:"content"`
+	ParentID   uint                `json:"parent_id"`
+	RootID     uint                `json:"root_id"`
+	CreatedAt  time.Time          `json:"created_at"`
+	ReplyCount int                `json:"reply_count"`
+	Replies    []*CommentWithReplies `json:"replies,omitempty"`
 }

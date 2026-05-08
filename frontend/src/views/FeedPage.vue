@@ -13,6 +13,7 @@ import { useAuthStore } from '../stores/auth'
 import { useNotificationStore } from '../stores/notification'
 import type { VideoItem } from '../types'
 import * as videoService from '../services/video'
+import CommentDrawer from '../components/comment/CommentDrawer.vue'
 
 const router = useRouter()
 const feedStore = useFeedStore()
@@ -21,7 +22,8 @@ const notifStore = useNotificationStore()
 
 const activeTab = ref<FeedTab>('latest')
 const activeIndex = ref(0)
-const showCommentsFor = ref<number | null>(null)
+const commentDrawerOpen = ref(false)
+const commentVideoId = ref(0)
 const playToken = ref<string | null>(null)
 
 // Play token from current video item for tracking
@@ -57,7 +59,11 @@ const onTabChange = (tab: FeedTab) => {
 const swiperRef = ref()
 const { isMuted } = useVideoControls((key) => {
   if (key === 'c' || key === 'C') {
-    showCommentsFor.value = items.value[activeIndex.value]?.video_id ?? null
+    const id = items.value[activeIndex.value]?.video_id
+    if (id) {
+      commentVideoId.value = id
+      commentDrawerOpen.value = true
+    }
   }
 })
 
@@ -127,7 +133,11 @@ const onKeyDown = (e: KeyboardEvent) => {
       break
     case 'c':
     case 'C':
-      showCommentsFor.value = items.value[activeIndex.value]?.video_id ?? null
+      const id = items.value[activeIndex.value]?.video_id
+      if (id) {
+        commentVideoId.value = id
+        commentDrawerOpen.value = true
+      }
       break
     case 'f':
     case 'F':
@@ -193,12 +203,18 @@ const handleCompletionReported = async (token?: string) => {
             <SlideInfoBar :item="item" />
           </div>
           <div class="slide-overlay-actions">
-            <SlideActionBar :item="item" @openComments="showCommentsFor = $event" />
+            <SlideActionBar :item="item" @openComments="(videoId) => { commentVideoId = videoId; commentDrawerOpen = true }" />
           </div>
           <div class="slide-debug">slide {{ item?.video_id }} {{ active ? '(ACTIVE)' : '' }}</div>
         </template>
       </FeedSwiper>
     </div>
+
+    <CommentDrawer
+      v-model="commentDrawerOpen"
+      :videoId="commentVideoId"
+      seamless
+    />
   </div>
 </template>
 

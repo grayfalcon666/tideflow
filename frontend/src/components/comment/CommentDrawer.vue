@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, watch } from 'vue'
 import * as commentService from '../../services/comment'
 import type { Comment } from '../../types'
+import { normalizeComment } from '../../types'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
@@ -14,9 +15,13 @@ const comments = ref<Comment[]>([])
 const cursor = ref<string | null>(null)
 const hasMore = ref(true)
 const loading = ref(false)
+const sending = ref(false)
 const inputText = ref('')
 const replyingTo = ref<{ rootId: number; parentId: number; username: string } | null>(null)
 const inputEl = ref<HTMLTextAreaElement>()
+
+// username lookup map built from loaded replies
+const usernameMap = ref<Record<number, string>>({})
 
 const fetchComments = async (reset = false) => {
   if (loading.value) return
@@ -26,14 +31,25 @@ const fetchComments = async (reset = false) => {
       comments.value = []
       cursor.value = null
       hasMore.value = true
+      usernameMap.value = {}
     }
     const resp = await commentService.getComments(props.videoId, 0, cursor.value ?? undefined, 20)
     const d = resp.data.data
     if (!d) return
+
+    const items = (d.items ?? []).map(normalizeComment)
+    items.forEach((c) => {
+      if (c.replies) {
+        c.replies.forEach((r) => {
+          usernameMap.value[r.comment_id] = r.username
+        })
+      }
+    })
+
     if (reset) {
-      comments.value = d.items ?? []
+      comments.value = items
     } else {
-      comments.value.push(...(d.items ?? []))
+      comments.value.push(...items)
     }
     cursor.value = d.next_cursor
     hasMore.value = d.has_more ?? false
@@ -42,8 +58,13 @@ const fetchComments = async (reset = false) => {
   }
 }
 
+const toggleReplies = (c: Comment) => {
+  c.showReplies = !c.showReplies
+}
+
 const sendComment = async () => {
-  if (!inputText.value.trim()) return
+  if (!inputText.value.trim() || sending.value) return
+  sending.value = true
   const content = inputText.value.trim()
   inputText.value = ''
   const rootId = replyingTo.value?.rootId ?? 0
@@ -51,24 +72,59 @@ const sendComment = async () => {
   try {
     const resp = await commentService.postComment(props.videoId, content, rootId, parentId)
     const c = resp.data.data
-    if (c) {
-      comments.value.unshift(c)
-      replyingTo.value = null
+    if (!c) return
+    const nc = normalizeComment(c)
+    usernameMap.value[nc.comment_id] = nc.username
+    if (rootId === 0) {
+      // new root comment
+      comments.value.unshift(nc)
+    } else {
+      // reply to existing root
+      const root = comments.value.find((r) => r.comment_id === rootId)
+      if (root) {
+        if (!root.replies) root.replies = []
+        root.replies.push(nc)
+        root.reply_count++
+        root.showReplies = true
+      }
     }
-  } catch {}
+    replyingTo.value = null
+  } catch {} finally {
+    sending.value = false
+  }
 }
 
-const startReply = (comment: Comment) => {
+const startReply = (c: Comment) => {
+  const rootId = c.root_id === 0 ? c.comment_id : c.root_id
   replyingTo.value = {
-    rootId: comment.root_id || comment.comment_id,
-    parentId: comment.comment_id,
-    username: comment.username,
+    rootId,
+    parentId: c.comment_id,
+    username: c.username,
   }
   inputEl.value?.focus()
 }
 
 const cancelReply = () => {
   replyingTo.value = null
+}
+
+const deleteComment = async (c: Comment) => {
+  try {
+    await commentService.deleteComment(props.videoId, c.comment_id)
+    if (c.root_id === 0) {
+      const idx = comments.value.findIndex((r) => r.comment_id === c.comment_id)
+      if (idx !== -1) comments.value.splice(idx, 1)
+    } else {
+      const root = comments.value.find((r) => r.comment_id === c.root_id)
+      if (root?.replies) {
+        const idx = root.replies.findIndex((r) => r.comment_id === c.comment_id)
+        if (idx !== -1) {
+          root.replies.splice(idx, 1)
+          root.reply_count--
+        }
+      }
+    }
+  } catch {}
 }
 
 const timeAgo = (ts: number) => {
@@ -87,24 +143,23 @@ const loadMore = () => {
   }
 }
 
-onMounted(() => {
-  if (modelValue.value) fetchComments()
-})
-
 watch(modelValue, (val) => {
-  if (val) fetchComments(true)
+  if (val) {
+    fetchComments(true)
+  }
 })
 </script>
 
 <template>
-  <q-drawer
+  <q-dialog
     v-model="modelValue"
-    side="right"
-    overlay
-    :width="450"
+    position="right"
     class="comment-drawer"
   >
-    <div class="drawer-inner">
+    <div
+      class="drawer-inner"
+      style="width: 450px; height: 100svh; max-width: 80vw; background: var(--bg-surface);"
+    >
       <div class="drawer-header">
         <span class="drawer-title">评论</span>
         <div class="close-btn" @click="modelValue = false">
@@ -113,37 +168,83 @@ watch(modelValue, (val) => {
       </div>
 
       <div class="comment-list" @scroll="loadMore">
+        <!-- Level 1: root comments (root_id === 0) -->
         <div
           v-for="c in comments"
           :key="c.comment_id"
           class="comment-item"
         >
-          <q-avatar size="36px">
-            <img :src="c.avatar_url || '/default-avatar.svg'" />
-          </q-avatar>
-          <div class="comment-body">
-            <div class="comment-meta">
-              <span class="comment-username">{{ c.username }}</span>
-              <span class="comment-time">{{ timeAgo(c.created_at) }}</span>
+          <!-- root comment body -->
+          <div class="comment-row">
+            <q-avatar size="36px">
+              <img :src="c.avatar_url || '/default-avatar.svg'" />
+            </q-avatar>
+            <div class="comment-body">
+              <div class="comment-meta">
+                <span class="comment-username">{{ c.username }}</span>
+                <span class="comment-time">{{ timeAgo(c.created_at) }}</span>
+              </div>
+              <p class="comment-content">{{ c.content }}</p>
+              <div class="comment-actions">
+                <span class="action-item" @click="startReply(c)">回复</span>
+                <span v-if="c.is_mine" class="action-item delete" @click="deleteComment(c)">删除</span>
+              </div>
             </div>
-            <p class="comment-content">{{ c.content }}</p>
-            <div class="comment-actions">
-              <span class="action-item" @click="startReply(c)">回复</span>
+          </div>
+
+          <!-- Level 2: replies (collapsed by default) -->
+          <div v-if="c.reply_count > 0" class="replies-section">
+            <div
+              v-if="c.showReplies && c.replies"
+              class="replies-list"
+            >
+              <div
+                v-for="r in c.replies"
+                :key="r.comment_id"
+                class="comment-row reply-row"
+              >
+                <q-avatar size="28px">
+                  <img :src="r.avatar_url || '/default-avatar.svg'" />
+                </q-avatar>
+                <div class="comment-body">
+                  <div class="comment-meta">
+                    <span class="comment-username">{{ r.username }}</span>
+                    <span v-if="r.parent_id !== r.root_id" class="reply-target">回复 @{{ usernameMap[r.parent_id] || '' }}</span>
+                    <span class="comment-time">{{ timeAgo(r.created_at) }}</span>
+                  </div>
+                  <p class="comment-content">{{ r.content }}</p>
+                  <div class="comment-actions">
+                    <span class="action-item" @click="startReply(r)">回复</span>
+                    <span v-if="r.is_mine" class="action-item delete" @click="deleteComment(r)">删除</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              class="toggle-replies"
+              @click="toggleReplies(c)"
+            >
+              <span>{{ c.showReplies ? '收起' : `展开${c.reply_count}条回复` }}</span>
             </div>
           </div>
         </div>
-        <div v-if="loading && comments.length" class="loading-more">
+
+        <div v-if="loading" class="loading-more">
           <q-spinner color="accent" size="24px" />
         </div>
         <div v-if="!hasMore && comments.length" class="no-more">没有更多了</div>
+        <div v-if="!loading && !comments.length" class="empty-state">
+          <TFIcon name="chat_bubble_outline" :size="32" color="var(--text-secondary)" />
+          <span>还没有评论</span>
+        </div>
       </div>
 
       <div class="input-bar">
         <div v-if="replyingTo" class="reply-indicator">
           <span>回复 @{{ replyingTo.username }}</span>
           <div class="cancel-reply-btn" @click="cancelReply">
-          <TFIcon name="close" :size="14" />
-        </div>
+            <TFIcon name="close" :size="14" />
+          </div>
         </div>
         <div class="input-row">
           <textarea
@@ -154,20 +255,22 @@ watch(modelValue, (val) => {
             class="comment-input"
             @keydown.enter.ctrl="sendComment"
           />
-          <div class="send-btn" @click="sendComment" :class="{ disabled: !inputText.trim() }">
+          <div
+            class="send-btn"
+            :class="{ disabled: !inputText.trim() || sending }"
+            @click="sendComment"
+          >
             <TFIcon name="send" :size="20" color="var(--accent)" />
           </div>
         </div>
       </div>
     </div>
-  </q-drawer>
+  </q-dialog>
 </template>
 
 <style scoped lang="scss">
 .comment-drawer {
-  :deep(.q-drawer) {
-    background: var(--bg-surface);
-  }
+  align-items: stretch;
 }
 
 .drawer-inner {
@@ -202,7 +305,17 @@ watch(modelValue, (val) => {
 
 .comment-item {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.comment-row {
+  display: flex;
   gap: var(--space-3);
+}
+
+.reply-row {
+  padding-left: var(--space-2);
 }
 
 .comment-body {
@@ -216,12 +329,18 @@ watch(modelValue, (val) => {
   display: flex;
   gap: var(--space-2);
   align-items: baseline;
+  flex-wrap: wrap;
 }
 
 .comment-username {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-base);
+}
+
+.reply-target {
+  font-size: 11px;
+  color: var(--accent);
 }
 
 .comment-time {
@@ -246,6 +365,38 @@ watch(modelValue, (val) => {
   color: var(--text-secondary);
   cursor: pointer;
   &:hover { color: var(--text-base); }
+  &.delete:hover { color: var(--text-negative); }
+}
+
+.replies-section {
+  padding-left: calc(36px + var(--space-3));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.replies-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.toggle-replies {
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px 0;
+  &:hover { opacity: 0.8; }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .close-btn {

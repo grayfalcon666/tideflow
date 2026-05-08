@@ -2,11 +2,13 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import VideoPlayer from '../components/video/VideoPlayer.vue'
+import VideoDetailHeader from '../components/video/VideoDetailHeader.vue'
 import VideoMetaSection from '../components/video/VideoMetaSection.vue'
 import VideoCommentPreview from '../components/video/VideoCommentPreview.vue'
 import CommentDrawer from '../components/comment/CommentDrawer.vue'
 import { useVideoControls } from '../composables/useVideoControls'
 import * as videoService from '../services/video'
+import { useInteractionStore } from '../stores/interaction'
 import type { VideoDetail } from '../types'
 import TFIcon from '../components/common/TFIcon.vue'
 
@@ -46,6 +48,10 @@ const fetchVideo = async () => {
     if (d) {
       // Normalize: backend returns "id" but components expect "video_id"
       video.value = { ...d, video_id: d.id } as VideoDetail
+      // sync with persisted interaction store
+      const interactionStore = useInteractionStore()
+      if (d.is_liked && d.id) interactionStore.syncLike(d.id)
+      if (d.is_following_author && d.author?.id) interactionStore.syncFollow(d.author.id)
     } else {
       error.value = '视频不存在或已删除'
     }
@@ -108,23 +114,6 @@ onMounted(async () => {
   </div>
 </template>
 
-<script lang="ts">
-// Sub-component defined inline
-import { defineComponent } from 'vue'
-const VideoDetailHeader = defineComponent({
-  props: { title: String },
-  emits: ['back'],
-  template: `
-    <div class="detail-header">
-      <div class="back-btn" @click="$emit('back')">
-        <TFIcon name="arrow_back" :size="24" />
-      </div>
-      <h2 class="detail-title">{{ title }}</h2>
-    </div>
-  `,
-})
-</script>
-
 <style scoped lang="scss">
 .video-detail-page {
   min-height: 100svh;
@@ -147,28 +136,5 @@ const VideoDetailHeader = defineComponent({
   max-width: 900px;
   margin: 0 auto;
   background: #000;
-}
-
-.detail-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.detail-title {
-  flex: 1;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-base);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin: 0;
 }
 </style>
