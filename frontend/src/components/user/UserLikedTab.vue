@@ -65,6 +65,10 @@ const formatCount = (n: number) => {
           <div class="card-stats">
             <TFIcon name="favorite" :size="12" />
             {{ formatCount(item.likes_count) }}
+            <TFIcon name="chat_bubble_outline" :size="12" />
+            {{ formatCount(item.comment_count) }}
+            <TFIcon name="visibility" :size="12" />
+            {{ formatCount(item.view_count ?? 0) }}
           </div>
         </div>
       </div>

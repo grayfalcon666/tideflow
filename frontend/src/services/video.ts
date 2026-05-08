@@ -40,3 +40,8 @@ export const publishVideo = (data: {
   tags?: string[]
 }) =>
   api.post<ApiResponse<{ video_id: number }>>('/videos', data)
+
+export const recordView = (playToken: string) =>
+  api.post<ApiResponse<{ user_id: number; client_ip: string; video_id: number }>>('/metrics/view', {
+    play_token: playToken,
+  })

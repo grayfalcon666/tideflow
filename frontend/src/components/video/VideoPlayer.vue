@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 
 const props = defineProps<{
   src: string
   poster?: string
   muted?: boolean
   autoPlay?: boolean
+  width?: number
+  height?: number
+  duration?: number
+  playToken?: string
+  videoId?: number
 }>()
 
 const emit = defineEmits<{
@@ -13,7 +18,19 @@ const emit = defineEmits<{
   pause: []
   click: []
   dblclick: []
+  viewReported: []
+  completionReported: []
 }>()
+
+// Tracking flags - reset when src changes
+const viewReported = ref(false)
+const completionReported = ref(false)
+
+// Dynamic threshold: min(5s, duration * 0.2)
+const viewThreshold = computed(() => {
+  const d = duration.value || props.duration || 0
+  return Math.min(5, d * 0.2)
+})
 
 const videoEl = ref<HTMLVideoElement>()
 const videoContainerRef = ref<HTMLDivElement>()
@@ -33,6 +50,24 @@ let indicatorTimer: ReturnType<typeof setTimeout> | null = null
 
 // Fullscreen
 const isFullscreen = ref(false)
+
+// Aspect ratio from metadata (fallback to props)
+const aspectRatio = computed(() => {
+  if (props.width && props.height && props.width > 0 && props.height > 0) {
+    return props.width / props.height
+  }
+  return 16 / 9 // default
+})
+
+const containerStyle = computed(() => {
+  if (props.width && props.height) {
+    return { aspectRatio: `${props.width} / ${props.height}` }
+  }
+  return {}
+})
+
+// Show skeleton until video first frame or poster loads
+const showSkeleton = ref(true)
 
 // Video style: mobile landscape -> contain, otherwise cover
 const videoStyle = ref<{ width: string; height: string; objectFit: 'cover' | 'contain' }>({ width: '100%', height: '100%', objectFit: 'cover' })
@@ -159,6 +194,8 @@ watch(
     if (newSrc) {
       showPoster.value = true
       isPlaying.value = false
+      viewReported.value = false
+      completionReported.value = false
       if (newAutoPlay) {
         setTimeout(() => play(), 100)
       }
@@ -187,10 +224,16 @@ onMounted(() => {
     })
     video.addEventListener('timeupdate', () => {
       currentTime.value = video.currentTime
+      // Valid play tracking: report once when threshold reached
+      if (!viewReported.value && props.playToken && currentTime.value >= viewThreshold.value) {
+        viewReported.value = true
+        emit('viewReported')
+      }
     })
     video.addEventListener('playing', () => {
       isPlaying.value = true
       showPoster.value = false
+      showSkeleton.value = false
       emit('play')
       resetHideTimer()
     })
@@ -203,6 +246,14 @@ onMounted(() => {
       isPlaying.value = false
       showPoster.value = true
       showControls.value = true
+      if (!completionReported.value && props.playToken) {
+        completionReported.value = true
+        emit('completionReported')
+      }
+    })
+    // Also hide skeleton when poster loads (covers video first frame)
+    video.addEventListener('loadeddata', () => {
+      showSkeleton.value = false
     })
   }
 
@@ -222,10 +273,16 @@ onUnmounted(() => {
   <div
     ref="videoContainerRef"
     class="video-player"
+    :style="containerStyle"
     @click="handleClick"
     @mouseenter="showControls = true"
     @mouseleave="isPlaying && (showControls = false)"
   >
+    <!-- Aspect-ratio skeleton shown before video loads -->
+    <div v-if="showSkeleton" class="video-skeleton">
+      <div class="skeleton-shimmer" />
+    </div>
+
     <video
       ref="videoEl"
       :src="src"
@@ -238,9 +295,7 @@ onUnmounted(() => {
       :style="videoStyle"
     />
     <img v-if="showPoster && poster" :src="poster" class="poster-img" alt="cover" />
-    <div v-if="showPoster && !poster" class="poster-placeholder">
-      <span>NO POSTER</span>
-    </div>
+    <div v-if="showPoster && !poster" class="poster-placeholder"></div>
 
     <transition name="fade">
       <div v-if="showPlayIndicator" class="play-indicator">
@@ -327,6 +382,33 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.video-skeleton {
+  position: absolute;
+  inset: 0;
+  background: #222;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    #222 0%,
+    #333 40%,
+    #444 60%,
+    #222 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .video-el {
   width: 100%;
   height: 100%;
@@ -344,12 +426,7 @@ onUnmounted(() => {
 .poster-placeholder {
   position: absolute;
   inset: 0;
-  background: #333;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #888;
-  font-size: 14px;
+  background: #1a1a1a;
 }
 
 .play-indicator {

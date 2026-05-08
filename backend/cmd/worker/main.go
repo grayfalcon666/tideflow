@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/robfig/cron/v3"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -84,6 +85,14 @@ func main() {
 		nw := mq.NewNotificationWorker(mqInstance, hub, repo)
 		nw.Start(ctx)
 	}()
+
+	// 播放量定时落库：每 5 分钟将 Redis 中的计数合并到 MySQL
+	c := cron.New()
+	c.AddFunc("@every 5m", func() {
+		vw := mq.NewViewCountWorker(rdb, repo)
+		vw.FlushViewCounts(context.Background())
+	})
+	c.Start()
 
 	log.Println("worker started")
 

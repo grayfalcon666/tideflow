@@ -59,6 +59,10 @@ const formatCount = (n: number) => {
       <span class="action-count">{{ formatCount(item.comment_count ?? 0) }}</span>
     </div>
     <div class="action-item">
+      <TFIcon name="visibility" :size="28" />
+      <span class="action-count">{{ formatCount(item.view_count ?? 0) }}</span>
+    </div>
+    <div class="action-item">
       <TFIcon name="share" :size="28" />
     </div>
   </div>

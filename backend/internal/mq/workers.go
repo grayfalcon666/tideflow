@@ -230,7 +230,7 @@ func (w *LikeWorker) handleLike(ctx context.Context, d amqp.Delivery) {
 
 	// Cache Aside：删除视频实体缓存和详情缓存，下次读时重建
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
-	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
 }
@@ -255,7 +255,7 @@ func (w *LikeWorker) handleUnlike(ctx context.Context, d amqp.Delivery) {
 
 	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
-	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
 }
@@ -342,6 +342,12 @@ func (w *CommentWorker) handleCommentPublish(ctx context.Context, d amqp.Deliver
 		return
 	}
 
+	// 更新 MySQL comment_count（非负保护）
+	if err := w.repo.IncrementCommentCount(ctx, e.VideoID, 1); err != nil {
+		log.Printf("failed to increment comment_count for video %d: %v", e.VideoID, err)
+		return
+	}
+
 	// 更新 MySQL popularity（评论权重 5，由 PopularityWorker 通过 MQ 异步更新 Redis 窗口）
 	if err := w.repo.IncrementVideoPopularity(ctx, e.VideoID, 5); err != nil {
 		log.Printf("failed to increment popularity for video %d: %v", e.VideoID, err)
@@ -350,7 +356,7 @@ func (w *CommentWorker) handleCommentPublish(ctx context.Context, d amqp.Deliver
 
 	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
-	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
 }
@@ -363,6 +369,12 @@ func (w *CommentWorker) handleCommentDelete(ctx context.Context, d amqp.Delivery
 		return
 	}
 
+	// 更新 MySQL comment_count（非负保护）
+	if err := w.repo.IncrementCommentCount(ctx, e.VideoID, -1); err != nil {
+		log.Printf("failed to decrement comment_count for video %d: %v", e.VideoID, err)
+		return
+	}
+
 	// 更新 MySQL popularity（评论权重 -5）
 	if err := w.repo.IncrementVideoPopularity(ctx, e.VideoID, -5); err != nil {
 		log.Printf("failed to decrement popularity for video %d: %v", e.VideoID, err)
@@ -371,7 +383,7 @@ func (w *CommentWorker) handleCommentDelete(ctx context.Context, d amqp.Delivery
 
 	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
-	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
 }
@@ -595,7 +607,7 @@ func (w *PopularityWorker) handlePopularityUpdate(ctx context.Context, d amqp.De
 
 	// Cache Aside：删除视频实体缓存和详情缓存
 	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
-	w.rdb.Del(ctx, redis.VideoDetail(e.VideoID))
+	w.rdb.Del(ctx, redis.VideoEntity(e.VideoID))
 
 	d.Ack(false)
 }
@@ -954,4 +966,66 @@ func (w *NotificationWorker) handleFollowNotification(ctx context.Context, d amq
 	w.hub.Push(e.VloggerID, string(msg))
 
 	d.Ack(false)
+}
+
+// ViewCountWorker 定时将 Redis 中的播放量增量合并到 MySQL
+type ViewCountWorker struct {
+	rdb  *goredis.Client
+	repo *repository.Repository
+}
+
+func NewViewCountWorker(rdb *goredis.Client, repo *repository.Repository) *ViewCountWorker {
+	return &ViewCountWorker{rdb: rdb, repo: repo}
+}
+
+// SMEMBERS dirty_videos -> 遍历 -> GET count:views:{id} -> UPDATE -> DECRBY -> SREM -> DEL if <= 0
+func (w *ViewCountWorker) FlushViewCounts(ctx context.Context) {
+	// 1. 提取待处理名单
+	ids, err := w.rdb.SMembers(ctx, redis.DirtyVideos()).Result()
+	if err != nil || len(ids) == 0 {
+		return
+	}
+
+	for _, idStr := range ids {
+		var videoID uint
+		if _, err := fmt.Sscanf(idStr, "%d", &videoID); err != nil {
+			continue
+		}
+
+		key := redis.ViewCount(videoID)
+
+		// 2. 获取增量数值
+		val, err := w.rdb.Get(ctx, key).Result()
+		if err != nil || val == "" {
+			// 没有计数了，直接移除名单
+			w.rdb.SRem(ctx, redis.DirtyVideos(), idStr)
+			continue
+		}
+
+		var delta int64
+		if _, err := fmt.Sscanf(val, "%d", &delta); err != nil || delta <= 0 {
+			w.rdb.SRem(ctx, redis.DirtyVideos(), idStr)
+			continue
+		}
+
+		// 3. 批量更新到 MySQL
+		if err := w.repo.IncrementViewCount(ctx, videoID, delta); err != nil {
+			log.Printf("FlushViewCounts: failed to update video %d: %v", videoID, err)
+			continue
+		}
+
+		// 4. DECRBY 扣减 Redis 计数
+		newVal, err := w.rdb.DecrBy(ctx, key, delta).Result()
+		if err != nil {
+			log.Printf("FlushViewCounts: failed to DecrBy video %d: %v", videoID, err)
+		}
+
+		// 5. SREM 移出待处理名单
+		w.rdb.SRem(ctx, redis.DirtyVideos(), idStr)
+
+		// 6. 如果扣减后 <= 0，DEL 这个 key 释放内存
+		if newVal <= 0 {
+			w.rdb.Del(ctx, key)
+		}
+	}
 }

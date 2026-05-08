@@ -68,15 +68,21 @@ export interface VideoItem {
   create_time: number
   likes_count: number
   comment_count: number
+  view_count?: number
   popularity: number
   is_liked: boolean
   author: VideoAuthor
   tags?: string[]
+  width?: number
+  height?: number
+  duration?: number
+  play_token?: string
 }
 
 export interface VideoDetail extends VideoItem {
   is_following_author: boolean
-  views_count: number
+  view_count: number
+  play_token?: string
 }
 
 // ============ Feed ============

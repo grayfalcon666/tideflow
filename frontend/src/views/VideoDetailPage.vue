@@ -23,6 +23,20 @@ const { isMuted } = useVideoControls((key) => {
   }
 })
 
+const handleViewReported = async (token?: string) => {
+  if (!token) return
+  try {
+    await videoService.recordView(token)
+  } catch {}
+}
+
+const handleCompletionReported = async (token?: string) => {
+  if (!token) return
+  try {
+    await videoService.recordView(token)
+  } catch {}
+}
+
 const videoId = Number(route.params.id)
 
 const fetchVideo = async () => {
@@ -68,6 +82,13 @@ onMounted(async () => {
           :poster="video.cover_url"
           :muted="isMuted"
           :autoPlay="true"
+          :width="video.width"
+          :height="video.height"
+          :duration="video.duration"
+          :playToken="video.play_token"
+          :videoId="videoId"
+          @viewReported="handleViewReported(video.play_token)"
+          @completionReported="handleCompletionReported(video.play_token)"
         />
       </div>
 
@@ -126,7 +147,6 @@ const VideoDetailHeader = defineComponent({
   max-width: 900px;
   margin: 0 auto;
   background: #000;
-  aspect-ratio: 16 / 9;
 }
 
 .detail-header {

@@ -12,6 +12,7 @@ import { useFeedStore, type FeedTab } from '../stores/feed'
 import { useAuthStore } from '../stores/auth'
 import { useNotificationStore } from '../stores/notification'
 import type { VideoItem } from '../types'
+import * as videoService from '../services/video'
 
 const router = useRouter()
 const feedStore = useFeedStore()
@@ -21,6 +22,13 @@ const notifStore = useNotificationStore()
 const activeTab = ref<FeedTab>('latest')
 const activeIndex = ref(0)
 const showCommentsFor = ref<number | null>(null)
+const playToken = ref<string | null>(null)
+
+// Play token from current video item for tracking
+const currentPlayToken = computed(() => {
+  const item = items.value[activeIndex.value]
+  return item?.play_token ?? playToken.value
+})
 
 const items = computed(() =>
   activeTab.value === 'latest' ? feedStore.latestItems : feedStore.followingItems
@@ -133,6 +141,23 @@ const onKeyDown = (e: KeyboardEvent) => {
       break
   }
 }
+
+const handleViewReported = async (token?: string) => {
+  if (!token) return
+  try {
+    await videoService.recordView(token)
+    // Invalidate token after successful report
+    playToken.value = null
+  } catch {}
+}
+
+const handleCompletionReported = async (token?: string) => {
+  if (!token) return
+  try {
+    await videoService.recordView(token)
+    playToken.value = null
+  } catch {}
+}
 </script>
 
 <template>
@@ -153,6 +178,13 @@ const onKeyDown = (e: KeyboardEvent) => {
             :poster="item?.cover_url ?? ''"
             :muted="isMuted"
             :autoPlay="active"
+            :width="item?.width"
+            :height="item?.height"
+            :duration="item?.duration"
+            :playToken="item?.play_token"
+            :videoId="item?.video_id"
+            @viewReported="handleViewReported(item?.play_token)"
+            @completionReported="handleCompletionReported(item?.play_token)"
           />
           <div class="slide-overlay-author">
             <SlideAuthorBar :item="item" />

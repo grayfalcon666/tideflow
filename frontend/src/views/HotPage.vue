@@ -18,6 +18,7 @@ type RawVideoItem = {
   create_time: string
   likes_count: number
   comment_count: number
+  view_count?: number
   popularity: number
   is_liked: boolean
   is_big_v?: boolean
@@ -36,6 +37,7 @@ const normalizeVideos = (items: RawVideoItem[]): any[] =>
     create_time: new Date(v.create_time).getTime() / 1000,
     likes_count: v.likes_count,
     comment_count: v.comment_count,
+    view_count: v.view_count,
     popularity: v.popularity,
     is_liked: v.is_liked,
     author: {
@@ -141,6 +143,7 @@ const formatCount = (n: number) => {
           <div class="card-stats">
             <span><TFIcon name="favorite" :size="14" /> {{ formatCount(item?.likes_count ?? 0) }}</span>
             <span><TFIcon name="chat_bubble_outline" :size="14" /> {{ formatCount(item?.comment_count ?? 0) }}</span>
+            <span><TFIcon name="visibility" :size="14" /> {{ formatCount(item?.view_count ?? 0) }}</span>
           </div>
         </div>
       </div>

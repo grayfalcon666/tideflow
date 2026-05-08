@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
 	"tideflow/internal/middleware"
 	"tideflow/internal/service"
+	"tideflow/pkg/media"
 	"tideflow/pkg/response"
 )
 
@@ -40,13 +42,19 @@ func (h *VideoHandler) UploadVideo(c *gin.Context) {
 		return
 	}
 
-	url, err := h.video.UploadVideo(c.Request.Context(), file)
+	url, meta, err := h.video.UploadVideo(c.Request.Context(), file)
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
 
-	response.Created(c, gin.H{"play_url": url})
+	response.Created(c, gin.H{
+		"play_url":     url,
+		"duration":     meta.Duration,
+		"width":        meta.Width,
+		"height":       meta.Height,
+		"is_vertical":  meta.IsVertical,
+	})
 }
 
 // @Summary 上传封面
@@ -108,7 +116,18 @@ func (h *VideoHandler) PublishVideo(c *gin.Context) {
 		username = account.Username
 	}
 
-	videoID, err := h.video.PublishVideo(c.Request.Context(), userID, username, req.Title, req.Description, req.PlayURL, req.CoverURL, req.Tags)
+	// Reconstruct file path from play_url to extract meta via ffprobe
+	// play_url like "/videos/xxx.mp4" -> "./uploads/videos/xxx.mp4"
+	filename := req.PlayURL
+	if filename != "" && filename[0] == '/' {
+		filename = filepath.Join(h.video.UploadDir, "videos", filepath.Base(filename))
+	}
+	meta, err := media.ExtractVideoMeta(filename)
+	if err != nil || meta == nil {
+		meta = &media.VideoMeta{}
+	}
+
+	videoID, err := h.video.PublishVideo(c.Request.Context(), userID, username, req.Title, req.Description, req.PlayURL, req.CoverURL, req.Tags, meta)
 	if err != nil {
 		response.InternalServerError(c, err.Error())
 		return
@@ -156,9 +175,14 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	_ = userID
 	isLiked := false
 	isFollowing := false
+
+	var playToken string
+	if video != nil {
+		ip := c.ClientIP()
+		playToken, _ = h.video.GeneratePlayToken(c.Request.Context(), video.ID, userID, ip)
+	}
 
 	response.Success(c, gin.H{
 		"id":                  video.ID,
@@ -167,12 +191,18 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 		"description":         video.Description,
 		"play_url":            video.PlayURL,
 		"cover_url":           video.CoverURL,
+		"duration":            video.Duration,
+		"width":               video.Width,
+		"height":              video.Height,
 		"create_time":         video.CreateTime,
 		"likes_count":         video.LikesCount,
+		"comment_count":       video.CommentCount,
+		"view_count":          video.ViewCount,
 		"popularity":          video.Popularity,
 		"tags":                tags,
 		"is_liked":            isLiked,
 		"is_following_author": isFollowing,
+		"play_token":          playToken,
 	})
 }
 
@@ -262,6 +292,42 @@ func (h *VideoHandler) DeleteVideo(c *gin.Context) {
 	}
 
 	response.Success(c, nil)
+}
+
+// @Summary 上报播放记录
+// @Description 验证 play_token，解析 user_id/ip，半小时限流后累加播放量
+// @Tags 视频
+// @Accept json
+// @Produce json
+// @Param body body RecordViewRequest true "播放记录"
+// @Success 200 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Router /api/v1/metrics/view [post]
+func (h *VideoHandler) RecordView(c *gin.Context) {
+	var req struct {
+		PlayToken string `json:"play_token" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	claims, err := h.video.ValidatePlayToken(req.PlayToken)
+	if err != nil {
+		response.Unauthorized(c)
+		return
+	}
+
+	userID := claims.UserID
+
+	h.video.RecordView(c.Request.Context(), claims.VideoID, userID)
+
+	response.Success(c, gin.H{
+		"user_id":  userID,
+		"client_ip": claims.ClientIP,
+		"video_id": claims.VideoID,
+	})
 }
 
 // Request types

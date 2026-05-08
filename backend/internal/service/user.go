@@ -45,13 +45,15 @@ type FollowUserItem struct {
 }
 
 type UserVideoItem struct {
-	VideoID     uint   `json:"video_id"`
-	Title       string `json:"title"`
-	CoverURL    string `json:"cover_url"`
-	CreateTime  int64  `json:"create_time"`
-	LikesCount  int64  `json:"likes_count"`
-	Popularity  int64  `json:"popularity"`
-	IsLiked     bool   `json:"is_liked"`
+	VideoID      uint   `json:"video_id"`
+	Title        string `json:"title"`
+	CoverURL     string `json:"cover_url"`
+	CreateTime   int64  `json:"create_time"`
+	LikesCount   int64  `json:"likes_count"`
+	CommentCount int64  `json:"comment_count"`
+	ViewCount    int64  `json:"view_count"`
+	Popularity   int64  `json:"popularity"`
+	IsLiked      bool   `json:"is_liked"`
 }
 
 func (s *UserService) GetUserByID(ctx context.Context, id uint) (*UserProfile, error) {
@@ -289,13 +291,15 @@ func (s *UserService) GetUserVideos(ctx context.Context, userID, requesterID uin
 	items := make([]*UserVideoItem, len(videos))
 	for i, v := range videos {
 		items[i] = &UserVideoItem{
-			VideoID:    v.ID,
-			Title:      v.Title,
-			CoverURL:   v.CoverURL,
-			CreateTime: v.CreateTime.UnixMilli(),
-			LikesCount: v.LikesCount,
-			Popularity: v.Popularity,
-			IsLiked:   likedMap[v.ID],
+			VideoID:      v.ID,
+			Title:        v.Title,
+			CoverURL:     v.CoverURL,
+			CreateTime:   v.CreateTime.UnixMilli(),
+			LikesCount:   v.LikesCount,
+			CommentCount: 0,
+			ViewCount:    v.ViewCount,
+			Popularity:   v.Popularity,
+			IsLiked:      likedMap[v.ID],
 		}
 	}
 

@@ -9,8 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"tideflow/internal/models"
 	"tideflow/internal/repository"
+	"tideflow/pkg/media"
 	infraredis "tideflow/infra/redis"
 )
 
@@ -20,36 +23,42 @@ type VideoService struct {
 	repo     *repository.Repository
 	cache    *infraredis.Cache
 	bigVThresh int
-	uploadDir string
+	UploadDir string
+	jwtSecret []byte
 }
 
-func NewVideoService(repo *repository.Repository, cache *infraredis.Cache, bigVThresh int, uploadDir string) *VideoService {
-	return &VideoService{repo: repo, cache: cache, bigVThresh: bigVThresh, uploadDir: uploadDir}
+func NewVideoService(repo *repository.Repository, cache *infraredis.Cache, bigVThresh int, uploadDir string, jwtSecret string) *VideoService {
+	return &VideoService{repo: repo, cache: cache, bigVThresh: bigVThresh, UploadDir: uploadDir, jwtSecret: []byte(jwtSecret)}
 }
 
-func (s *VideoService) UploadVideo(ctx context.Context, file *multipart.FileHeader) (string, error) {
+func (s *VideoService) UploadVideo(ctx context.Context, file *multipart.FileHeader) (string, *media.VideoMeta, error) {
 	src, err := file.Open()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer src.Close()
 
-	filename := filepath.Join(s.uploadDir, "videos", generateFilename(file.Filename))
+	filename := filepath.Join(s.UploadDir, "videos", generateFilename(file.Filename))
 	if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	dst, err := os.Create(filename)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, src); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	return "/videos/" + filepath.Base(filename), nil
+	meta, err := media.ExtractVideoMeta(filename)
+	if err != nil || meta == nil {
+		meta = &media.VideoMeta{}
+	}
+
+	return "/videos/" + filepath.Base(filename), meta, nil
 }
 
 func (s *VideoService) UploadCover(ctx context.Context, file *multipart.FileHeader) (string, error) {
@@ -59,7 +68,7 @@ func (s *VideoService) UploadCover(ctx context.Context, file *multipart.FileHead
 	}
 	defer src.Close()
 
-	filename := filepath.Join(s.uploadDir, "covers", generateFilename(file.Filename))
+	filename := filepath.Join(s.UploadDir, "covers", generateFilename(file.Filename))
 	if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
 		return "", err
 	}
@@ -77,16 +86,19 @@ func (s *VideoService) UploadCover(ctx context.Context, file *multipart.FileHead
 	return "/covers/" + filepath.Base(filename), nil
 }
 
-func (s *VideoService) PublishVideo(ctx context.Context, authorID uint, username, title, description, playURL, coverURL string, tags []string) (uint, error) {
+func (s *VideoService) PublishVideo(ctx context.Context, authorID uint, username, title, description, playURL, coverURL string, tags []string, meta *media.VideoMeta) (uint, error) {
 	video := &models.Video{
-		AuthorID:   authorID,
-		Username:   username,
-		Title:      title,
+		AuthorID:    authorID,
+		Username:    username,
+		Title:       title,
 		Description: description,
-		PlayURL:    playURL,
-		CoverURL:   coverURL,
-		CreateTime: time.Now(),
-		UpdateTime: time.Now(),
+		PlayURL:     playURL,
+		CoverURL:    coverURL,
+		Duration:    meta.Duration,
+		Width:       meta.Width,
+		Height:      meta.Height,
+		CreateTime:  time.Now(),
+		UpdateTime:  time.Now(),
 	}
 	if err := s.repo.CreateVideo(ctx, video); err != nil {
 		return 0, err
@@ -146,7 +158,12 @@ func (s *VideoService) DeleteVideo(ctx context.Context, id uint, authorID uint) 
 	if video.AuthorID != authorID {
 		return errors.New("forbidden")
 	}
-	return s.repo.SoftDeleteVideo(ctx, id)
+	if err := s.repo.SoftDeleteVideo(ctx, id); err != nil {
+		return err
+	}
+	// 删除后清理 L1/L2 缓存，防止已删除视频被拉取
+	s.cache.InvalidateVideoDetail(id)
+	return nil
 }
 
 func (s *VideoService) GetVideoTags(ctx context.Context, videoID uint) ([]string, error) {
@@ -161,6 +178,70 @@ func (s *VideoService) UpdatePopularity(ctx context.Context, videoID uint, chang
 
 func (s *VideoService) GetAccountByID(ctx context.Context, id uint) (*models.Account, error) {
 	return s.repo.GetAccountByID(ctx, id)
+}
+
+type PlayTokenClaims struct {
+	VideoID uint   `json:"video_id"`
+	UserID  uint   `json:"user_id"`
+	ClientIP string `json:"client_ip"`
+	jwt.RegisteredClaims
+}
+
+func (s *VideoService) GeneratePlayToken(ctx context.Context, videoID uint, userID uint, clientIP string) (string, error) {
+	exp := time.Now().Add(2 * time.Hour)
+
+	claims := PlayTokenClaims{
+		VideoID:  videoID,
+		UserID:   userID,
+		ClientIP: clientIP,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(exp),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.jwtSecret)
+}
+
+func (s *VideoService) ValidatePlayToken(tokenStr string) (*PlayTokenClaims, error) {
+	var claims PlayTokenClaims
+	token, err := jwt.ParseWithClaims(tokenStr, &claims, func(token *jwt.Token) (interface{}, error) {
+		return s.jwtSecret, nil
+	})
+	if err != nil || !token.Valid {
+		return nil, errors.New("invalid play_token")
+	}
+	return &claims, nil
+}
+
+const viewLimitTTL = 30 * time.Minute
+
+func (s *VideoService) RecordView(ctx context.Context, videoID uint, userID uint) (bool, error) {
+	rdb := s.cache.GetRedis()
+
+	// 半小时限流：SETNX limit:view:{user_id}:{video_id}
+	limitKey := infraredis.ViewLimit(userID, videoID)
+	set, err := rdb.SetNX(ctx, limitKey, "1", viewLimitTTL).Result()
+	if err != nil {
+		return false, err
+	}
+
+	// 返回 0 说明半小时内已记录过，静默丢弃
+	if !set {
+		return false, nil
+	}
+
+	// 播放量 INCR
+	rdb.Incr(ctx, infraredis.ViewCount(videoID))
+
+	// 记录待更新名单 SADD dirty_videos
+	rdb.SAdd(ctx, infraredis.DirtyVideos(), videoID)
+
+	// 删除视频实体缓存（L1 + L2），确保下次拉取到最新播放量
+	s.cache.InvalidateVideo(videoID)
+
+	return true, nil
 }
 
 func generateFilename(orig string) string {

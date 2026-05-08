@@ -120,7 +120,7 @@ const share = async () => {
     <div class="stats-row">
       <span><TFIcon name="favorite" :size="16" /> {{ formatCount(likesCount) }}</span>
       <span><TFIcon name="chat_bubble_outline" :size="16" /> {{ formatCount(video.comment_count) }}</span>
-      <span><TFIcon name="visibility" :size="16" /> {{ formatCount(video.views_count) }}</span>
+      <span><TFIcon name="visibility" :size="16" /> {{ formatCount(video.view_count ?? 0) }}</span>
     </div>
 
     <div class="action-row">

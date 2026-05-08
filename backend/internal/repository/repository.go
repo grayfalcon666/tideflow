@@ -115,6 +115,13 @@ func (r *Repository) IncrementLikesCount(ctx context.Context, id uint, delta int
 	).Error
 }
 
+func (r *Repository) IncrementViewCount(ctx context.Context, id uint, delta int64) error {
+	return r.db.WithContext(ctx).Exec(
+		"UPDATE videos SET view_count = view_count + ? WHERE id = ? AND deleted_at IS NULL",
+		delta, id,
+	).Error
+}
+
 func (r *Repository) IncrementFollowerCount(ctx context.Context, id uint, delta int64) error {
 	return r.db.WithContext(ctx).Exec(
 		"UPDATE accounts SET follower_count = GREATEST(follower_count + ?, 0) WHERE id = ?",
@@ -125,6 +132,13 @@ func (r *Repository) IncrementFollowerCount(ctx context.Context, id uint, delta 
 func (r *Repository) IncrementVideoPopularity(ctx context.Context, id uint, delta int64) error {
 	return r.db.WithContext(ctx).Exec(
 		"UPDATE videos SET popularity = GREATEST(popularity + ?, 0) WHERE id = ? AND deleted_at IS NULL",
+		delta, id,
+	).Error
+}
+
+func (r *Repository) IncrementCommentCount(ctx context.Context, id uint, delta int64) error {
+	return r.db.WithContext(ctx).Exec(
+		"UPDATE videos SET comment_count = GREATEST(comment_count + ?, 0) WHERE id = ? AND deleted_at IS NULL",
 		delta, id,
 	).Error
 }
