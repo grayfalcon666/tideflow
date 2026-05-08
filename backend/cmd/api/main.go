@@ -66,14 +66,13 @@ func main() {
 	}
 
 	cache := infraredis.NewCache(rdb)
-	cache.SetLock(infraredis.NewLock(rdb))
 	rateLimiter := infraredis.NewRateLimiter(rdb)
 
 	repo := repository.New(db)
 	cache.SetRepo(repo)
 	authSvc := service.NewAuthService(repo, cfg.JWT.Secret, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 	userSvc := service.NewUserService(repo, cfg.BigVThreshold, mqInstance)
-	videoSvc := service.NewVideoService(repo, cache, cfg.BigVThreshold, cfg.Upload.Dir)
+	videoSvc := service.NewVideoService(repo, cache, cfg.BigVThreshold, cfg.Upload.Dir, cfg.JWT.Secret)
 	feedSvc := service.NewFeedService(repo, cache, rdb, cfg.BigVThreshold)
 	interactionSvc := service.NewInteractionService(repo, mqInstance)
 	msgSvc := service.NewMessageService(repo)
@@ -186,7 +185,7 @@ func setupRouter(
 	r.POST("/api/v1/videos/upload", authMw.JWTAuth(), videoHandler.UploadVideo)
 	r.POST("/api/v1/videos/cover", authMw.JWTAuth(), videoHandler.UploadCover)
 	r.POST("/api/v1/videos", authMw.JWTAuth(), videoHandler.PublishVideo)
-	r.GET("/api/v1/videos/:id", authMw.SoftJWTAuth(), videoHandler.GetVideo)
+	r.GET("/api/v1/videos/:id", authMw.JWTAuth(), videoHandler.GetVideo)
 	r.PUT("/api/v1/videos/:id", authMw.JWTAuth(), videoHandler.UpdateVideo)
 	r.DELETE("/api/v1/videos/:id", authMw.JWTAuth(), videoHandler.DeleteVideo)
 
@@ -214,6 +213,8 @@ func setupRouter(
 	r.GET("/api/v1/notifications/stream", authMw.SSERequireAuth(), sseHandler.Stream)
 
 	r.GET("/api/v1/tags/hot", tagHandler.GetHotTags)
+
+	r.POST("/api/v1/metrics/view", videoHandler.RecordView)
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
 		ginSwagger.PersistAuthorization(true),

@@ -31,9 +31,14 @@ type Video struct {
 	Description  string         `gorm:"size:255" json:"description"`
 	PlayURL      string         `gorm:"size:255;not null" json:"play_url"`
 	CoverURL     string         `gorm:"size:255;not null" json:"cover_url"`
+	Duration     float64        `gorm:"type:float;default:0" json:"duration"`
+	Width        int            `gorm:"type:int;default:0" json:"width"`
+	Height       int            `gorm:"type:int;default:0" json:"height"`
 	CreateTime   time.Time      `gorm:"index:idx_videos_author_create,priority:2;index:idx_videos_popularity_time_id,priority:2" json:"create_time"`
 	UpdateTime   time.Time      `json:"update_time"`
 	LikesCount   int64          `gorm:"not null;default:0;index:idx_videos_likes_count_id,priority:1" json:"likes_count"`
+	CommentCount int64          `gorm:"not null;default:0" json:"comment_count"`
+	ViewCount    int64          `gorm:"not null;default:0" json:"view_count"`
 	Popularity   int64          `gorm:"not null;default:0;index:idx_videos_popularity_time_id,priority:1" json:"popularity"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 }
