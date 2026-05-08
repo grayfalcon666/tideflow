@@ -1,16 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { UserProfile, UserInfo } from '../../types'
 import { useRouter } from 'vue-router'
 import * as userService from '../../services/user'
+import * as videoService from '../../services/video'
+import { useAuthStore } from '../../stores/auth'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
   user: UserProfile
   isMe: boolean
 }>()
+const emit = defineEmits<{
+  (e: 'updated', user: UserInfo): void
+}>()
 
 const router = useRouter()
+const authStore = useAuthStore()
+
 const followingMenuOpen = ref(false)
 const followingUsers = ref<UserInfo[]>([])
 const followingLoading = ref(false)
@@ -20,6 +27,68 @@ const followersMenuOpen = ref(false)
 const followersUsers = ref<UserInfo[]>([])
 const followersLoading = ref(false)
 let followersLoaded = false
+
+// Edit dialog
+const editDialogOpen = ref(false)
+const editUsername = ref('')
+const editBio = ref('')
+const editSaving = ref(false)
+const avatarInputRef = ref<HTMLInputElement>()
+const avatarUploading = ref(false)
+
+const triggerAvatarUpload = () => {
+  avatarInputRef.value?.click()
+}
+
+const onAvatarFileChange = async (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  avatarUploading.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const resp = await videoService.uploadAvatar(fd)
+    const url = resp.data.data?.cover_url
+    if (url) {
+      await userService.updateMe({ avatar_url: url })
+      authStore.fetchMe()
+      emit('updated', { ...props.user, avatar_url: url } as any)
+    }
+  } catch (err: any) {
+    console.error('[Avatar] 上传失败:', err?.response?.data ?? err.message)
+  } finally {
+    avatarUploading.value = false
+    if (avatarInputRef.value) avatarInputRef.value.value = ''
+  }
+}
+
+const openEditDialog = () => {
+  editUsername.value = props.user.username ?? ''
+  editBio.value = props.user.bio ?? ''
+  editDialogOpen.value = true
+}
+
+watch(() => props.user.username, (v) => { editUsername.value = v ?? '' })
+watch(() => props.user.bio, (v) => { editBio.value = v ?? '' })
+
+const saveEdit = async () => {
+  if (editSaving.value) return
+  editSaving.value = true
+  try {
+    if (editBio.value !== props.user.bio) {
+      await userService.updateMe({ bio: editBio.value || undefined })
+    }
+    if (editUsername.value !== props.user.username) {
+      await userService.updateUsername(editUsername.value)
+    }
+    authStore.fetchMe()
+    editDialogOpen.value = false
+  } catch (err: any) {
+    console.error('[EditDialog] 请求失败:', err?.response?.data ?? err.message)
+  } finally {
+    editSaving.value = false
+  }
+}
 
 const loadFollowing = async () => {
   if (followingLoaded) return
@@ -65,16 +134,32 @@ const formatCount = (n: number) => {
 <template>
   <div class="user-info-card">
     <div class="card-main">
-      <q-avatar size="80px" class="avatar" @click="router.push(`/u/${user.id}`)">
+      <q-avatar size="min(80px, 20vw)" class="avatar" @click="props.isMe ? triggerAvatarUpload() : router.push(`/u/${user.id}`)">
         <div
           class="avatar-img"
           :style="{ backgroundImage: `url('${user.avatar_url || '/default-avatar.svg'}')` }"
+        />
+        <input
+          ref="avatarInputRef"
+          type="file"
+          accept="image/*"
+          class="hidden-input"
+          @change="onAvatarFileChange"
         />
       </q-avatar>
       <div class="user-info">
         <div class="username-row">
           <h2 class="username">{{ user.username }}</h2>
           <TFIcon v-if="user.is_big_v" name="verified" :size="20" color="orange" />
+          <q-btn
+            v-if="props.isMe"
+            flat
+            dense
+            class="edit-btn"
+            @click="openEditDialog"
+          >
+            <TFIcon name="edit" :size="18" />
+          </q-btn>
         </div>
         <p v-if="user.bio" class="user-bio">{{ user.bio }}</p>
         <div class="stats-row">
@@ -160,17 +245,37 @@ const formatCount = (n: number) => {
               </q-item>
             </q-list>
           </q-btn-dropdown>
-          <span><strong>{{ formatCount(user.video_count) }}</strong> 作品</span>
         </div>
       </div>
     </div>
-    <q-btn
-      v-if="props.isMe"
-      flat
-      no-caps
-      label="编辑资料"
-      class="edit-btn"
-    />
+
+    <!-- Edit Profile Dialog -->
+    <q-dialog v-model="editDialogOpen" class="edit-dialog">
+      <div class="edit-dialog-inner">
+        <div class="edit-dialog-header">
+          <span>编辑资料</span>
+          <button class="close-btn" @click="editDialogOpen = false">
+            <TFIcon name="close" :size="20" />
+          </button>
+        </div>
+        <div class="edit-dialog-body">
+          <div class="field-group">
+            <label>用户名</label>
+            <input v-model="editUsername" placeholder="输入用户名" class="edit-input" />
+          </div>
+          <div class="field-group">
+            <label>个人简介</label>
+            <textarea v-model="editBio" placeholder="输入简介" class="edit-textarea" rows="3" />
+          </div>
+        </div>
+        <div class="edit-dialog-footer">
+          <button class="cancel-btn" @click="editDialogOpen = false">取消</button>
+          <button class="save-btn" :disabled="editSaving" @click="saveEdit">
+            {{ editSaving ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </q-dialog>
   </div>
 </template>
 
@@ -299,11 +404,111 @@ const formatCount = (n: number) => {
 }
 
 .edit-btn {
+  color: var(--text-secondary);
+  padding: 4px;
+}
+
+.edit-dialog {
+  align-items: flex-end;
+  justify-content: center;
+
+  :deep(.q-dialog__inner) {
+    padding: 0;
+  }
+}
+
+.edit-dialog-inner {
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--space-4);
+  box-sizing: border-box;
+}
+
+.edit-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-base);
+
+  .close-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px;
+  }
+}
+
+.edit-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+
+  label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+}
+
+.edit-input,
+.edit-textarea {
+  width: 100%;
+  padding: var(--space-3);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  font-size: 13px;
+  border-radius: var(--radius-md);
   color: var(--text-base);
-  padding: 6px 16px;
+  font-size: 14px;
+  box-sizing: border-box;
+  outline: none;
+  resize: none;
+
+  &:focus {
+    border-color: var(--accent);
+  }
+}
+
+.edit-dialog-footer {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+
+  .cancel-btn,
+  .save-btn {
+    flex: 1;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+  }
+
+  .cancel-btn {
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+  }
+
+  .save-btn {
+    background: var(--accent);
+    color: #000;
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
 }
 </style>

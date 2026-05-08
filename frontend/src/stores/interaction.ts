@@ -38,9 +38,14 @@ export const useInteractionStore = defineStore('interaction', () => {
     followingUserIds.value.add(userId)
   }
 
+  const syncAll = (videoIds: number[], userIds: number[]) => {
+    videoIds.forEach(id => likedVideoIds.value.add(id))
+    userIds.forEach(id => followingUserIds.value.add(id))
+  }
+
   return {
     likedVideoIds, followingUserIds,
-    isLiked, isFollowing, toggleLike, toggleFollow, reset, syncLike, syncFollow,
+    isLiked, isFollowing, toggleLike, toggleFollow, reset, syncLike, syncFollow, syncAll,
   }
 }, {
   persist: {

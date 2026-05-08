@@ -16,13 +16,13 @@ const isMobile = ref(window.innerWidth < 1024)
 const currentRoute = computed(() => router.currentRoute.value.path)
 
 // Bottom nav visible on these routes
-const bottomNavRoutes = ['/', '/hot', '/messages']
+const bottomNavRoutes = ['/', '/hot', '/messages', '/notifications']
 const showBottomNav = computed(() => {
   if (!isMobile.value) return false
   // FeedPage renders its own BottomNav, skip here
   if (currentRoute.value === '/') return false
   // HotPage and UserPage use the App-level one
-  if (['/hot', '/messages'].some(r => currentRoute.value === r)) return true
+  if (['/hot', '/messages', '/notifications'].some(r => currentRoute.value === r)) return true
   if (currentRoute.value.startsWith('/u/')) return true
   return false
 })

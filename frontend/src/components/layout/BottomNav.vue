@@ -78,7 +78,7 @@ const navigate = (tab: Tab) => {
   position: fixed;
   bottom: 0;
   left: 0;
-  right: 0;
+  width: 100%;
   height: var(--bottom-nav-height);
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
@@ -87,6 +87,7 @@ const navigate = (tab: Tab) => {
   justify-content: space-around;
   z-index: 100;
   padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
 }
 
 .nav-tab {

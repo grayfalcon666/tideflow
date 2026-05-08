@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import * as commentService from '../../services/comment'
 import type { Comment } from '../../types'
 import { normalizeComment } from '../../types'
 import TFIcon from '../common/TFIcon.vue'
+
+const router = useRouter()
 
 const props = defineProps<{
   videoId: number
@@ -23,6 +26,10 @@ const fetchPreview = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const goToUser = (authorId: number) => {
+  router.push(`/u/${authorId}`)
 }
 
 onMounted(() => fetchPreview())
@@ -47,7 +54,7 @@ const timeAgo = (ts: number) => {
     </div>
     <div v-else-if="comments.length" class="preview-list">
       <div v-for="c in comments" :key="c.comment_id" class="preview-item">
-        <q-avatar size="28px">
+        <q-avatar size="28px" class="clickable-avatar" @click="goToUser(c.author_id)">
           <img :src="c.avatar_url || '/default-avatar.svg'" />
         </q-avatar>
         <div class="item-content">
@@ -124,6 +131,11 @@ const timeAgo = (ts: number) => {
 .item-time {
   font-size: 11px;
   color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.clickable-avatar {
+  cursor: pointer;
   flex-shrink: 0;
 }
 </style>

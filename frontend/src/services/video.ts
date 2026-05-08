@@ -32,6 +32,11 @@ export const uploadCover = (formData: FormData) =>
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 
+export const uploadAvatar = (formData: FormData) =>
+  api.post<ApiResponse<{ cover_url: string }>>('/videos/cover', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
 export const publishVideo = (data: {
   title: string
   description?: string

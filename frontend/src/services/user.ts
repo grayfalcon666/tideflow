@@ -30,3 +30,9 @@ export const getFollowers = (id: number, cursor?: string, limit = 20) =>
     `/users/${id}/followers`,
     { params: { cursor, limit } }
   )
+
+export const updateMe = (data: { bio?: string; avatar_url?: string }) =>
+  api.put<ApiResponse<UserInfo>>('/users/me', data)
+
+export const updateUsername = (username: string) =>
+  api.put<ApiResponse<void>>('/users/me/username', { username })

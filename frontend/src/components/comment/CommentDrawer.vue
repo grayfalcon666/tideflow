@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import * as commentService from '../../services/comment'
 import type { Comment } from '../../types'
 import { normalizeComment } from '../../types'
@@ -8,6 +9,8 @@ import TFIcon from '../common/TFIcon.vue'
 const props = defineProps<{
   videoId: number
 }>()
+
+const router = useRouter()
 
 const modelValue = defineModel<boolean>({ default: false })
 
@@ -108,6 +111,10 @@ const cancelReply = () => {
   replyingTo.value = null
 }
 
+const goToUser = (authorId: number) => {
+  router.push(`/u/${authorId}`)
+}
+
 const deleteComment = async (c: Comment) => {
   try {
     await commentService.deleteComment(props.videoId, c.comment_id)
@@ -176,7 +183,7 @@ watch(modelValue, (val) => {
         >
           <!-- root comment body -->
           <div class="comment-row">
-            <q-avatar size="36px">
+            <q-avatar size="36px" class="clickable-avatar" @click="goToUser(c.author_id)">
               <img :src="c.avatar_url || '/default-avatar.svg'" />
             </q-avatar>
             <div class="comment-body">
@@ -203,7 +210,7 @@ watch(modelValue, (val) => {
                 :key="r.comment_id"
                 class="comment-row reply-row"
               >
-                <q-avatar size="28px">
+                <q-avatar size="28px" class="clickable-avatar" @click="goToUser(r.author_id)">
                   <img :src="r.avatar_url || '/default-avatar.svg'" />
                 </q-avatar>
                 <div class="comment-body">
@@ -312,6 +319,10 @@ watch(modelValue, (val) => {
 .comment-row {
   display: flex;
   gap: var(--space-3);
+}
+
+.clickable-avatar {
+  cursor: pointer;
 }
 
 .reply-row {
