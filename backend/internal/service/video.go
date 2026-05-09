@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -124,6 +125,10 @@ func (s *VideoService) PublishVideo(ctx context.Context, authorID uint, username
 	return video.ID, nil
 }
 
+func (s *VideoService) GetVideoByIDUnscoped(ctx context.Context, id uint) (*models.Video, error) {
+	return s.repo.GetVideoByIDUnscoped(ctx, id)
+}
+
 func (s *VideoService) GetVideoByID(ctx context.Context, id uint) (*models.Video, error) {
 	video, err := s.cache.GetVideoDetail(ctx, id, func(ctx context.Context, id uint) (*models.Video, error) {
 		return s.repo.GetVideoByID(ctx, id)
@@ -158,9 +163,51 @@ func (s *VideoService) DeleteVideo(ctx context.Context, id uint, authorID uint) 
 	if video.AuthorID != authorID {
 		return errors.New("forbidden")
 	}
+
+	// 软删除关联评论
+	if err := s.repo.SoftDeleteCommentsByVideo(ctx, id); err != nil {
+		slog.Warn("soft delete comments failed", "video_id", id, "err", err)
+	}
+
+	// 软删除关联笔记
+	if err := s.repo.SoftDeleteNotesByVideo(ctx, id); err != nil {
+		slog.Warn("soft delete notes failed", "video_id", id, "err", err)
+	}
+
+	// 删除视频标签关联
+	if err := s.repo.DeleteVideoTags(ctx, id); err != nil {
+		slog.Warn("delete video tags failed", "video_id", id, "err", err)
+	}
+
+	// 删除物理视频文件
+	if video.PlayURL != "" {
+		videoPath := filepath.Join(s.UploadDir, "videos", filepath.Base(video.PlayURL))
+		if err := os.Remove(videoPath); err != nil {
+			if !os.IsNotExist(err) {
+				slog.Warn("remove video file failed", "path", videoPath, "err", err)
+			}
+		} else {
+			slog.Info("removed video file", "path", videoPath)
+		}
+	}
+
+	// 删除物理封面文件
+	if video.CoverURL != "" {
+		coverPath := filepath.Join(s.UploadDir, "covers", filepath.Base(video.CoverURL))
+		if err := os.Remove(coverPath); err != nil {
+			if !os.IsNotExist(err) {
+				slog.Warn("remove cover file failed", "path", coverPath, "err", err)
+			}
+		} else {
+			slog.Info("removed cover file", "path", coverPath)
+		}
+	}
+
+	// 软删除视频记录
 	if err := s.repo.SoftDeleteVideo(ctx, id); err != nil {
 		return err
 	}
+
 	// 删除后清理 L1/L2 缓存，防止已删除视频被拉取
 	s.cache.InvalidateVideoDetail(id)
 	return nil

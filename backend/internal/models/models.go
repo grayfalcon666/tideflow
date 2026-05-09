@@ -15,6 +15,7 @@ type Account struct {
 	AvatarURL     string         `gorm:"size:512" json:"avatar_url"`
 	Bio           string         `gorm:"size:255" json:"bio"`
 	FollowerCount int            `gorm:"not null;default:0" json:"follower_count"`
+	LikesPublic   bool           `gorm:"not null;default:true" json:"likes_public"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
@@ -41,6 +42,10 @@ type Video struct {
 	ViewCount    int64          `gorm:"not null;default:0" json:"view_count"`
 	Popularity   int64          `gorm:"not null;default:0;index:idx_videos_popularity_time_id,priority:1" json:"popularity"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+
+	// 虚拟字段（非持久化），由 feed service 填充
+	AvatarURL string `gorm:"-" json:"avatar_url,omitempty"`
+	IsBigV    bool   `gorm:"-" json:"is_big_v,omitempty"`
 }
 
 func (Video) TableName() string {
@@ -94,6 +99,7 @@ type Message struct {
 	FromID    uint           `gorm:"index;not null" json:"from_id"`
 	ToID      uint           `gorm:"index;not null" json:"to_id"`
 	Content   string         `gorm:"type:text;not null" json:"content"`
+	MsgType   string         `gorm:"size:20;default:text;not null" json:"msg_type"`
 	IsRead    bool           `gorm:"default:false" json:"is_read"`
 	CreatedAt time.Time      `json:"created_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
@@ -148,4 +154,19 @@ type Notification struct {
 
 func (Notification) TableName() string {
 	return "notifications"
+}
+
+type Note struct {
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	VideoID   uint           `gorm:"not null;index:idx_notes_video_timestamp,priority:1" json:"video_id"`
+	AuthorID  uint           `gorm:"not null" json:"author_id"`
+	Username  string         `gorm:"size:255;not null" json:"username"`
+	Timestamp float64        `gorm:"type:float;not null;index:idx_notes_video_timestamp,priority:2" json:"timestamp"`
+	Content   string         `gorm:"type:text;not null" json:"content"`
+	CreatedAt time.Time      `json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+}
+
+func (Note) TableName() string {
+	return "notes"
 }

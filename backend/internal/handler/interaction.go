@@ -140,6 +140,49 @@ func (h *InteractionHandler) GetLikedVideos(c *gin.Context) {
 	})
 }
 
+// @Summary 查看用户点赞过的视频
+// @Description 获取指定用户点赞过的视频列表，若用户设置隐私则仅自己可见
+// @Tags 互动
+// @Produce json
+// @Param id path int true "用户ID"
+// @Param cursor query string false "游标"
+// @Param limit query int false "每页数量" default(20)
+// @Success 200 {object} response.PageResponse
+// @Failure 403 {object} response.Response
+// @Router /api/v1/users/{id}/liked-videos [get]
+func (h *InteractionHandler) GetUserLikedVideos(c *gin.Context) {
+	idStr := c.Param("id")
+	targetUserID, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid user id")
+		return
+	}
+
+	requesterID := middleware.GetUserID(c)
+	cursor := c.Query("cursor")
+	limitStr := c.DefaultQuery("limit", "20")
+	limit := 20
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 50 {
+		limit = l
+	}
+
+	videos, nextCursor, hasMore, err := h.interaction.GetUserLikedVideos(c.Request.Context(), uint(targetUserID), requesterID, cursor, limit)
+	if err != nil {
+		if errors.Is(err, service.ErrLikesPrivate) {
+			response.Forbidden(c, err.Error())
+			return
+		}
+		response.InternalServerError(c, err.Error())
+		return
+	}
+
+	response.Success(c, response.PageResponse{
+		Items:      videos,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	})
+}
+
 // @Summary 发表评论
 // @Description 对视频发表评论或回复
 // @Tags 互动

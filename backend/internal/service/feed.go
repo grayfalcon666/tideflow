@@ -39,6 +39,9 @@ func (s *FeedService) ListLatest(ctx context.Context, cursor string, limit int) 
 	ids, err := s.rdb.ZRevRange(ctx, infraredis.FeedGlobal(), 0, int64(limit-1)).Result()
 	if err != nil || len(ids) == 0 {
 		videos, err := s.repo.GetLatestVideos(ctx, before, limit+1)
+		if err == nil {
+			s.enrichWithAccountData(ctx, videos)
+		}
 		return videos, nil, false, err
 	}
 
@@ -51,6 +54,9 @@ func (s *FeedService) ListLatest(ctx context.Context, cursor string, limit int) 
 	videos, err := s.cache.GetVideoByIDs(ctx, videoIDs)
 	if err != nil || len(videos) == 0 {
 		dbVideos, dbErr := s.repo.GetLatestVideos(ctx, before, limit+1)
+		if dbErr == nil {
+			s.enrichWithAccountData(ctx, dbVideos)
+		}
 		return dbVideos, nil, false, dbErr
 	}
 
@@ -65,6 +71,7 @@ func (s *FeedService) ListLatest(ctx context.Context, cursor string, limit int) 
 		nextCursor = &nc
 	}
 
+	s.enrichWithAccountData(ctx, videos)
 	return videos, nextCursor, hasMore, nil
 }
 
@@ -125,6 +132,7 @@ func (s *FeedService) ListPopular(ctx context.Context, offset, limit int, window
 			n := strconv.Itoa(offset + limit)
 			next = &n
 		}
+		s.enrichWithAccountData(ctx, videos)
 		return videos, next, hasMore, nil
 	}
 
@@ -140,6 +148,7 @@ func (s *FeedService) ListPopular(ctx context.Context, offset, limit int, window
 		return nil, nil, false, err
 	}
 
+	s.enrichWithAccountData(ctx, videos)
 	next := strconv.Itoa(offset + limit)
 	return videos, &next, true, nil
 }
@@ -315,6 +324,7 @@ func (s *FeedService) ListByFollowing(ctx context.Context, userID uint, cursor s
 		nextCursor = &nc
 	}
 
+	s.enrichWithAccountData(ctx, videos)
 	return videos, nextCursor, len(videos) == limit, nil
 }
 
@@ -342,6 +352,43 @@ func normalsMapToSlice(m map[uint]bool) []uint {
 		res = append(res, k)
 	}
 	return res
+}
+
+// enrichWithAccountData 批量填充视频的 avatar_url 和 is_big_v 虚拟字段
+func (s *FeedService) enrichWithAccountData(ctx context.Context, videos []*models.Video) {
+	authorIDs := make(map[uint]bool)
+	for _, v := range videos {
+		if v != nil {
+			authorIDs[v.AuthorID] = true
+		}
+	}
+	if len(authorIDs) == 0 {
+		return
+	}
+	ids := make([]uint, 0, len(authorIDs))
+	for id := range authorIDs {
+		ids = append(ids, id)
+	}
+
+	accounts, err := s.repo.GetAccountsByIDs(ctx, ids)
+	if err != nil {
+		return
+	}
+
+	accMap := make(map[uint]*models.Account)
+	for _, acc := range accounts {
+		accMap[acc.ID] = acc
+	}
+
+	for _, v := range videos {
+		if v == nil {
+			continue
+		}
+		if acc, ok := accMap[v.AuthorID]; ok {
+			v.AvatarURL = acc.AvatarURL
+			v.IsBigV = acc.FollowerCount >= s.bigVThresh
+		}
+	}
 }
 
 func (s *FeedService) ListByTag(ctx context.Context, tag string, cursor string, limit int) ([]*models.Video, *string, bool, error) {

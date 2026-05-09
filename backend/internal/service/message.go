@@ -96,6 +96,25 @@ func (s *MessageService) GetMessages(ctx context.Context, userID, otherID uint, 
 	return msgs, nextCursor, hasMore, nil
 }
 
+func (s *MessageService) ShareVideo(ctx context.Context, fromID uint, toIDs []uint, content string) ([]*models.Message, error) {
+	msgs := make([]*models.Message, 0, len(toIDs))
+	for _, toID := range toIDs {
+		msg := &models.Message{
+			FromID:    fromID,
+			ToID:      toID,
+			Content:   content,
+			MsgType:   "video_share",
+			IsRead:    false,
+			CreatedAt: time.Now(),
+		}
+		if err := s.repo.CreateMessage(ctx, msg); err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs, nil
+}
+
 func (s *MessageService) MarkRead(ctx context.Context, userID, otherID uint) error {
 	return s.repo.MarkMessagesRead(ctx, otherID, userID)
 }

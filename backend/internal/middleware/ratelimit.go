@@ -86,6 +86,23 @@ func (m *RateLimitMiddleware) CommentLimit() gin.HandlerFunc {
 	}
 }
 
+func (m *RateLimitMiddleware) NoteLimit() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := GetUserID(c)
+		allowed, _, err := m.limiter.Allow(c.Request.Context(), "note_write", fmt.Sprintf("%d", userID), 20, time.Minute)
+		if err != nil {
+			c.Next()
+			return
+		}
+		if !allowed {
+			response.TooManyRequests(c)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 func (m *RateLimitMiddleware) SocialLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := GetUserID(c)

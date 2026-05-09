@@ -255,6 +255,10 @@ func (r *Repository) SoftDeleteComment(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Model(&models.Comment{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
 }
 
+func (r *Repository) SoftDeleteCommentsByVideo(ctx context.Context, videoID uint) error {
+	return r.db.WithContext(ctx).Model(&models.Comment{}).Where("video_id = ?", videoID).Update("deleted_at", time.Now()).Error
+}
+
 // FollowOrCreate inserts or updates a follow relationship.
 // Uses INSERT ... ON DUPLICATE KEY UPDATE: only updates status (and updated_at) when status was 0.
 // Returns (affectedRows, error). affectedRows=1 means new insert or 0→1 change (发MQ).
@@ -438,6 +442,19 @@ func (r *Repository) CreateVideoTag(ctx context.Context, videoID, tagID uint) er
 	return r.db.WithContext(ctx).Create(&vt).Error
 }
 
+func (r *Repository) DeleteVideoTags(ctx context.Context, videoID uint) error {
+	return r.db.WithContext(ctx).Where("video_id = ?", videoID).Delete(&models.VideoTag{}).Error
+}
+
+func (r *Repository) GetVideoByIDUnscoped(ctx context.Context, id uint) (*models.Video, error) {
+	var video models.Video
+	err := r.db.WithContext(ctx).Unscoped().First(&video, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &video, nil
+}
+
 func (r *Repository) CreateOutboxMsg(ctx context.Context, msg *models.OutboxMsg) error {
 	return r.db.WithContext(ctx).Create(msg).Error
 }
@@ -568,6 +585,43 @@ func (r *Repository) GetFollowersWithCursor(ctx context.Context, vloggerID uint,
 	}
 	err = query.Order("id DESC").Limit(limit).Find(&accounts).Error
 	return accounts, err
+}
+
+func (r *Repository) CreateNote(ctx context.Context, note *models.Note) error {
+	return r.db.WithContext(ctx).Create(note).Error
+}
+
+func (r *Repository) GetNoteByID(ctx context.Context, id uint) (*models.Note, error) {
+	var note models.Note
+	err := r.db.WithContext(ctx).First(&note, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &note, nil
+}
+
+func (r *Repository) GetNotesByVideo(ctx context.Context, videoID uint, timestampCursor float64, limit int) ([]*models.Note, error) {
+	var notes []*models.Note
+	query := r.db.WithContext(ctx).Where("video_id = ? AND deleted_at IS NULL", videoID)
+	if timestampCursor > 0 {
+		query = query.Where("timestamp > ?", timestampCursor)
+	}
+	err := query.Order("timestamp ASC").Limit(limit).Find(&notes).Error
+	return notes, err
+}
+
+func (r *Repository) SoftDeleteNote(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Model(&models.Note{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
+}
+
+func (r *Repository) SoftDeleteNotesByVideo(ctx context.Context, videoID uint) error {
+	return r.db.WithContext(ctx).Model(&models.Note{}).Where("video_id = ?", videoID).Update("deleted_at", time.Now()).Error
+}
+
+func (r *Repository) CountNotesByVideo(ctx context.Context, videoID uint) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&models.Note{}).Where("video_id = ? AND deleted_at IS NULL", videoID).Count(&count).Error
+	return count, err
 }
 
 func (r *Repository) GetHotTags(ctx context.Context, limit int) ([]models.Tag, error) {

@@ -33,8 +33,12 @@ type UserProfile struct {
 	AvatarURL      string `json:"avatar_url"`
 	Bio            string `json:"bio"`
 	FollowerCount  int    `json:"follower_count"`
-	FollowingCount int64   `json:"following_count,omitempty"`
+	FollowingCount int64  `json:"following_count,omitempty"`
 	IsBigV         bool   `json:"is_big_v,omitempty"`
+	LikesPublic    bool   `json:"likes_public"`
+	IsFollowing    bool   `json:"is_following,omitempty"`
+	IsFollowingMe  bool   `json:"is_following_me,omitempty"`
+	IsMe           bool   `json:"is_me,omitempty"`
 }
 
 type FollowUserItem struct {
@@ -70,6 +74,7 @@ func (s *UserService) GetUserByID(ctx context.Context, id uint) (*UserProfile, e
 		FollowerCount:  acc.FollowerCount,
 		FollowingCount: followingCount,
 		IsBigV:         acc.FollowerCount >= s.bigVThresh,
+		LikesPublic:    acc.LikesPublic,
 	}, nil
 }
 
@@ -85,7 +90,16 @@ func (s *UserService) GetUserByUsername(ctx context.Context, username string) (*
 		Bio:           acc.Bio,
 		FollowerCount: acc.FollowerCount,
 		IsBigV:        acc.FollowerCount >= s.bigVThresh,
+		LikesPublic:   acc.LikesPublic,
 	}, nil
+}
+
+func (s *UserService) IsFollowing(ctx context.Context, followerID, vloggerID uint) bool {
+	if followerID == 0 || vloggerID == 0 {
+		return false
+	}
+	social, err := s.repo.GetActiveSocial(ctx, followerID, vloggerID)
+	return err == nil && social != nil && social.Status == 1
 }
 
 func (s *UserService) UpdateUser(ctx context.Context, id uint, updates map[string]interface{}) error {

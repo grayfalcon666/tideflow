@@ -44,6 +44,7 @@ func migrate(db *gorm.DB) error {
 		&models.VideoTag{},
 		&models.OutboxMsg{},
 		&models.Notification{},
+		&models.Note{},
 	); err != nil {
 		return err
 	}

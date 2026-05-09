@@ -15,6 +15,7 @@ import (
 var (
 	ErrAlreadyLiked    = errors.New("already liked")
 	ErrLikeNotExists   = errors.New("like not exists")
+	ErrLikesPrivate    = errors.New("user's liked videos are private")
 )
 
 type InteractionService struct {
@@ -157,6 +158,22 @@ func parseCursorInt64(s string) (int64, error) {
 		v = v*10 + int64(s[i]-'0')
 	}
 	return v, nil
+}
+
+// GetUserLikedVideos returns liked videos for a target user.
+// If requesterID != targetUserID, the target user's likes_public setting is checked.
+func (s *InteractionService) GetUserLikedVideos(ctx context.Context, targetUserID, requesterID uint, cursor string, limit int) ([]*models.Video, *string, bool, error) {
+	// Privacy check: only allow if requester is the target user, or target has likes_public enabled
+	if requesterID != targetUserID {
+		acc, err := s.repo.GetAccountByID(ctx, targetUserID)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		if !acc.LikesPublic {
+			return nil, nil, false, ErrLikesPrivate
+		}
+	}
+	return s.GetLikedVideos(ctx, targetUserID, cursor, limit)
 }
 
 func (s *InteractionService) GetAccountAvatar(ctx context.Context, id uint) (string, error) {

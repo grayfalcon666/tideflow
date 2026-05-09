@@ -261,6 +261,16 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 		response.NotFound(c, "user not found")
 		return
 	}
+
+	// 注入当前用户与该用户之间的关注关系
+	currentUserID := middleware.GetUserID(c)
+	if currentUserID == user.ID {
+		user.IsMe = true
+	} else if currentUserID > 0 {
+		user.IsFollowing = h.repo.IsFollowing(c.Request.Context(), currentUserID, user.ID)
+		user.IsFollowingMe = h.repo.IsFollowing(c.Request.Context(), user.ID, currentUserID)
+	}
+
 	response.Success(c, user)
 }
 
@@ -296,8 +306,9 @@ func (h *UserHandler) GetUserByUsername(c *gin.Context) {
 func (h *UserHandler) UpdateMe(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var req struct {
-		AvatarURL *string `json:"avatar_url" binding:"omitempty,min=1"`
-		Bio       *string `json:"bio" binding:"omitempty,max=255"`
+		AvatarURL   *string `json:"avatar_url" binding:"omitempty,min=1"`
+		Bio         *string `json:"bio" binding:"omitempty,max=255"`
+		LikesPublic *bool   `json:"likes_public"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
@@ -310,6 +321,9 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	}
 	if req.Bio != nil {
 		updates["bio"] = *req.Bio
+	}
+	if req.LikesPublic != nil {
+		updates["likes_public"] = *req.LikesPublic
 	}
 
 	if err := h.repo.UpdateUser(c.Request.Context(), userID, updates); err != nil {

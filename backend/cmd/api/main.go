@@ -27,12 +27,13 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
-	"github.com/swaggo/files"
+	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	infraredis "tideflow/infra/redis"
 	"tideflow/internal/config"
 	_ "tideflow/internal/docs"
 	"tideflow/internal/handler"
@@ -40,7 +41,6 @@ import (
 	"tideflow/internal/mq"
 	"tideflow/internal/repository"
 	"tideflow/internal/service"
-	infraredis "tideflow/infra/redis"
 )
 
 func main() {
@@ -78,6 +78,7 @@ func main() {
 	msgSvc := service.NewMessageService(repo)
 	notifSvc := service.NewNotificationService(repo)
 	tagSvc := service.NewTagService(repo)
+	noteSvc := service.NewNoteService(repo)
 
 	authMw := middleware.NewAuthMiddleware(authSvc)
 	rateLimitMw := middleware.NewRateLimitMiddleware(rateLimiter)
@@ -90,12 +91,13 @@ func main() {
 	msgHandler := handler.NewMessageHandler(msgSvc)
 	notifHandler := handler.NewNotificationHandler(notifSvc)
 	tagHandler := handler.NewTagHandler(tagSvc)
+	noteHandler := handler.NewNoteHandler(noteSvc, userSvc)
 
 	hub := mq.NewSSEHub()
 	go hub.Run()
 	sseHandler := handler.NewSSEHandler(hub)
 
-	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, cfg)
+	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, noteHandler, cfg)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
@@ -147,6 +149,7 @@ func setupRouter(
 	notifHandler *handler.NotificationHandler,
 	sseHandler *handler.SSEHandler,
 	tagHandler *handler.TagHandler,
+	noteHandler *handler.NoteHandler,
 	cfg *config.Config,
 ) *gin.Engine {
 	r := gin.Default()
@@ -170,7 +173,7 @@ func setupRouter(
 	r.POST("/api/v1/auth/logout", authMw.JWTAuth(), authHandler.Logout)
 
 	r.GET("/api/v1/users/me", authMw.JWTAuth(), userHandler.GetMe)
-	r.GET("/api/v1/users/:id", userHandler.GetUser)
+	r.GET("/api/v1/users/:id", authMw.SoftJWTAuth(), userHandler.GetUser)
 	r.GET("/api/v1/users/username/:username", userHandler.GetUserByUsername)
 	r.PUT("/api/v1/users/me", authMw.JWTAuth(), userHandler.UpdateMe)
 	r.PUT("/api/v1/users/me/username", authMw.JWTAuth(), userHandler.UpdateUsername)
@@ -198,14 +201,20 @@ func setupRouter(
 	r.DELETE("/api/v1/videos/:id/like", authMw.JWTAuth(), rateLimitMw.LikeLimit(), interactionHandler.UnlikeVideo)
 	r.GET("/api/v1/videos/:id/like", authMw.JWTAuth(), interactionHandler.IsLiked)
 	r.GET("/api/v1/likes/mine", authMw.JWTAuth(), interactionHandler.GetLikedVideos)
+	r.GET("/api/v1/users/:id/liked-videos", authMw.SoftJWTAuth(), interactionHandler.GetUserLikedVideos)
 	r.POST("/api/v1/videos/:id/comments", authMw.JWTAuth(), rateLimitMw.CommentLimit(), interactionHandler.PublishComment)
 	r.DELETE("/api/v1/videos/:id/comments/:comment_id", authMw.JWTAuth(), rateLimitMw.CommentLimit(), interactionHandler.DeleteComment)
 	r.GET("/api/v1/videos/:id/comments", authMw.SoftJWTAuth(), interactionHandler.GetComments)
+
+	r.POST("/api/v1/videos/:id/notes", authMw.JWTAuth(), rateLimitMw.NoteLimit(), noteHandler.CreateNote)
+	r.GET("/api/v1/videos/:id/notes", authMw.SoftJWTAuth(), noteHandler.GetNotes)
+	r.DELETE("/api/v1/videos/:id/notes/:note_id", authMw.JWTAuth(), noteHandler.DeleteNote)
 
 	r.POST("/api/v1/messages", authMw.JWTAuth(), msgHandler.SendMessage)
 	r.GET("/api/v1/messages/conversations", authMw.JWTAuth(), msgHandler.GetConversations)
 	r.GET("/api/v1/messages/conversations/:user_id", authMw.JWTAuth(), msgHandler.GetMessages)
 	r.PUT("/api/v1/messages/conversations/:user_id/read", authMw.JWTAuth(), msgHandler.MarkRead)
+	r.POST("/api/v1/messages/share-video", authMw.JWTAuth(), msgHandler.ShareVideo)
 
 	r.GET("/api/v1/notifications", authMw.JWTAuth(), notifHandler.GetNotifications)
 	r.PUT("/api/v1/notifications/read", authMw.JWTAuth(), notifHandler.MarkRead)

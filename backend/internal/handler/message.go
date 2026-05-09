@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -112,6 +113,51 @@ func (h *MessageHandler) GetMessages(c *gin.Context) {
 		NextCursor: nextCursor,
 		HasMore:    hasMore,
 	})
+}
+
+// @Summary 分享视频给好友
+// @Description 将视频预览消息批量发送给指定好友
+// @Tags 私信
+// @Security OAuth2Password
+// @Accept json
+// @Produce json
+// @Param body body object true "视频分享请求"
+// @Success 201 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Failure 401 {object} response.Response
+// @Router /api/v1/messages/share-video [post]
+func (h *MessageHandler) ShareVideo(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var req struct {
+		ToIDs      []uint `json:"to_ids" binding:"required,min=1,max=20"`
+		VideoID    uint   `json:"video_id" binding:"required"`
+		Title      string `json:"title" binding:"required,max=255"`
+		CoverURL   string `json:"cover_url" binding:"required,max=512"`
+		AuthorName string `json:"author_name" binding:"required,max=255"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	contentBytes, err := json.Marshal(gin.H{
+		"video_id":    req.VideoID,
+		"title":       req.Title,
+		"cover_url":   req.CoverURL,
+		"author_name": req.AuthorName,
+	})
+	if err != nil {
+		response.InternalServerError(c, "failed to marshal video share payload")
+		return
+	}
+
+	msgs, err := h.msg.ShareVideo(c.Request.Context(), userID, req.ToIDs, string(contentBytes))
+	if err != nil {
+		response.InternalServerError(c, err.Error())
+		return
+	}
+
+	response.Created(c, gin.H{"messages": msgs})
 }
 
 // @Summary 标记会话已读

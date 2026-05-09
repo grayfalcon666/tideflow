@@ -155,6 +155,17 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 
 	video, err := h.video.GetVideoByID(c.Request.Context(), uint(id))
 	if err != nil {
+		// 尝试 Unscoped 查询，判断是否为已删除视频
+		deletedVideo, deletedErr := h.video.GetVideoByIDUnscoped(c.Request.Context(), uint(id))
+		if deletedErr == nil && deletedVideo.DeletedAt.Valid {
+			response.Success(c, gin.H{
+				"id":         deletedVideo.ID,
+				"is_deleted": true,
+				"title":      deletedVideo.Title,
+				"author_id":  deletedVideo.AuthorID,
+			})
+			return
+		}
 		response.NotFound(c, "video not found")
 		return
 	}
