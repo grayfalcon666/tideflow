@@ -30,6 +30,11 @@ const routes: RouteRecordRaw[] = [
     meta: {},
   },
   {
+    path: '/video/:id/edit',
+    component: () => import('../views/VideoEditPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/u/:id',
     component: () => import('../views/UserProfilePage.vue'),
     meta: {},
