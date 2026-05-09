@@ -192,6 +192,12 @@ func setupRouter(
 	r.PUT("/api/v1/videos/:id", authMw.JWTAuth(), videoHandler.UpdateVideo)
 	r.DELETE("/api/v1/videos/:id", authMw.JWTAuth(), videoHandler.DeleteVideo)
 
+	// 切片上传（分块 / 断点续传 / 并发）
+	r.POST("/api/v1/videos/upload/init", authMw.JWTAuth(), videoHandler.InitChunkedUpload)
+	r.POST("/api/v1/videos/upload/chunk", authMw.JWTAuth(), videoHandler.UploadChunk)
+	r.GET("/api/v1/videos/upload/status/:upload_id", authMw.JWTAuth(), videoHandler.GetUploadStatus)
+	r.POST("/api/v1/videos/upload/complete", authMw.JWTAuth(), videoHandler.CompleteChunkedUpload)
+
 	r.GET("/api/v1/feed/latest", authMw.SoftJWTAuth(), feedHandler.ListLatest)
 	r.GET("/api/v1/feed/popular", authMw.SoftJWTAuth(), feedHandler.ListPopular)
 	r.GET("/api/v1/feed/following", authMw.JWTAuth(), feedHandler.ListByFollowing)

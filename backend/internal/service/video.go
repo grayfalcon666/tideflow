@@ -2,7 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -19,6 +23,23 @@ import (
 )
 
 var ErrVideoNotFound = errors.New("video not found")
+
+// UploadSession tracks a chunked upload in progress.
+type UploadSession struct {
+	UploadID       string `json:"upload_id"`
+	Filename       string `json:"filename"`
+	TotalChunks    int    `json:"total_chunks"`
+	ChunkSize      int64  `json:"chunk_size"`
+	FileSize       int64  `json:"file_size"`
+	UploadedChunks []int  `json:"uploaded_chunks"`
+	CreatedAt      int64  `json:"created_at"`
+}
+
+const (
+	uploadSessionTTL  = 24 * time.Hour
+	defaultChunkSize  = 5 * 1024 * 1024   // 5MB
+	maxUploadFileSize = 500 * 1024 * 1024 // 500MB
+)
 
 type VideoService struct {
 	repo     *repository.Repository
@@ -293,4 +314,163 @@ func (s *VideoService) RecordView(ctx context.Context, videoID uint, userID uint
 
 func generateFilename(orig string) string {
 	return time.Now().Format("20060102150405") + "_" + orig
+}
+
+// InitChunkedUpload creates an upload session and returns its upload_id.
+func (s *VideoService) InitChunkedUpload(ctx context.Context, filename string, fileSize int64, chunkSize int64) (string, error) {
+	if fileSize <= 0 || fileSize > maxUploadFileSize {
+		return "", fmt.Errorf("invalid file size: %d", fileSize)
+	}
+	if chunkSize <= 0 {
+		chunkSize = defaultChunkSize
+	}
+
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	uploadID := hex.EncodeToString(b)
+
+	totalChunks := int((fileSize + chunkSize - 1) / chunkSize)
+
+	chunksDir := filepath.Join(s.UploadDir, "chunks", uploadID)
+	if err := os.MkdirAll(chunksDir, 0755); err != nil {
+		return "", err
+	}
+
+	session := UploadSession{
+		UploadID:       uploadID,
+		Filename:       filename,
+		TotalChunks:    totalChunks,
+		ChunkSize:      chunkSize,
+		FileSize:       fileSize,
+		UploadedChunks: []int{},
+		CreatedAt:      time.Now().Unix(),
+	}
+
+	data, err := json.Marshal(session)
+	if err != nil {
+		return "", err
+	}
+
+	rdb := s.cache.GetRedis()
+	key := infraredis.UploadSession(uploadID)
+	if err := rdb.Set(ctx, key, data, uploadSessionTTL).Err(); err != nil {
+		return "", err
+	}
+
+	return uploadID, nil
+}
+
+// UploadChunk writes a single chunk to disk and updates the session.
+func (s *VideoService) UploadChunk(ctx context.Context, uploadID string, chunkIndex int, reader io.Reader) error {
+	session, err := s.getUploadSession(ctx, uploadID)
+	if err != nil {
+		return fmt.Errorf("invalid upload session")
+	}
+
+	if chunkIndex < 0 || chunkIndex >= session.TotalChunks {
+		return fmt.Errorf("invalid chunk index: %d", chunkIndex)
+	}
+
+	chunkPath := filepath.Join(s.UploadDir, "chunks", uploadID, fmt.Sprintf("chunk_%d", chunkIndex))
+	dst, err := os.Create(chunkPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, reader); err != nil {
+		os.Remove(chunkPath)
+		return err
+	}
+
+	// Idempotent: avoid duplicate entries.
+	found := false
+	for _, idx := range session.UploadedChunks {
+		if idx == chunkIndex {
+			found = true
+			break
+		}
+	}
+	if !found {
+		session.UploadedChunks = append(session.UploadedChunks, chunkIndex)
+	}
+
+	data, _ := json.Marshal(session)
+	rdb := s.cache.GetRedis()
+	rdb.Set(ctx, infraredis.UploadSession(uploadID), data, uploadSessionTTL)
+
+	return nil
+}
+
+// GetUploadStatus returns the current upload session state.
+func (s *VideoService) GetUploadStatus(ctx context.Context, uploadID string) (*UploadSession, error) {
+	return s.getUploadSession(ctx, uploadID)
+}
+
+// CompleteChunkedUpload merges all chunks, extracts meta, and cleans up.
+func (s *VideoService) CompleteChunkedUpload(ctx context.Context, uploadID string) (string, *media.VideoMeta, error) {
+	session, err := s.getUploadSession(ctx, uploadID)
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid upload session: %w", err)
+	}
+
+	if len(session.UploadedChunks) != session.TotalChunks {
+		missing := session.TotalChunks - len(session.UploadedChunks)
+		return "", nil, fmt.Errorf("missing %d chunks", missing)
+	}
+
+	chunksDir := filepath.Join(s.UploadDir, "chunks", uploadID)
+
+	finalFilename := generateFilename(session.Filename)
+	finalPath := filepath.Join(s.UploadDir, "videos", finalFilename)
+	if err := os.MkdirAll(filepath.Dir(finalPath), 0755); err != nil {
+		return "", nil, err
+	}
+
+	dst, err := os.Create(finalPath)
+	if err != nil {
+		return "", nil, err
+	}
+	defer dst.Close()
+
+	for i := 0; i < session.TotalChunks; i++ {
+		chunkPath := filepath.Join(chunksDir, fmt.Sprintf("chunk_%d", i))
+		src, err := os.Open(chunkPath)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to read chunk %d: %w", i, err)
+		}
+		if _, err := io.Copy(dst, src); err != nil {
+			src.Close()
+			return "", nil, fmt.Errorf("failed to merge chunk %d: %w", i, err)
+		}
+		src.Close()
+	}
+
+	meta, err := media.ExtractVideoMeta(finalPath)
+	if err != nil || meta == nil {
+		meta = &media.VideoMeta{}
+	}
+
+	os.RemoveAll(chunksDir)
+	rdb := s.cache.GetRedis()
+	rdb.Del(ctx, infraredis.UploadSession(uploadID))
+
+	return "/videos/" + filepath.Base(finalFilename), meta, nil
+}
+
+func (s *VideoService) getUploadSession(ctx context.Context, uploadID string) (*UploadSession, error) {
+	rdb := s.cache.GetRedis()
+	key := infraredis.UploadSession(uploadID)
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var session UploadSession
+	if err := json.Unmarshal([]byte(data), &session); err != nil {
+		return nil, err
+	}
+	return &session, nil
 }

@@ -20,7 +20,8 @@ const (
 	KeyBigVMark        = "bigv:mark:%d"
 	KeyViewLimit      = "ratelimit:view:%d:%d"
 	KeyViewCount      = "count:views:%d"
-	KeyDirtyVideos    = "dirty:videos"
+	KeyDirtyVideos     = "dirty:videos"
+	KeyUploadSession   = "upload:%s"
 )
 
 func AccountToken(uid uint) string {
@@ -85,4 +86,8 @@ func ViewCount(videoID uint) string {
 
 func DirtyVideos() string {
 	return fmt.Sprintf("%s:"+KeyDirtyVideos, Version)
+}
+
+func UploadSession(uploadID string) string {
+	return fmt.Sprintf("%s:"+KeyUploadSession, Version, uploadID)
 }

@@ -1,24 +1,35 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useQuasar } from 'quasar'
 import * as videoService from '../services/video'
 import * as tagService from '../services/tag'
+import { useChunkedUpload } from '../composables/useChunkedUpload'
 import type { Tag } from '../types'
 import TFIcon from '../components/common/TFIcon.vue'
 
 const router = useRouter()
+const $q = useQuasar()
 const step = ref(1)
-const loading = ref(false)
 const error = ref('')
 
-// Step 1: video upload
+// Step 1: chunked video upload
+const {
+  progress: uploadProgress,
+  speed: uploadSpeed,
+  status: uploadStatus,
+  error: uploadError,
+  upload: chunkedUpload,
+  cancel: cancelUpload,
+} = useChunkedUpload({ chunkSize: 5 * 1024 * 1024, concurrency: 3 })
+
 const videoFile = ref<File>()
 const videoUrl = ref('')
-const videoProgress = ref(0)
 
 // Step 2: cover upload
 const coverFile = ref<File>()
 const coverUrl = ref('')
+const coverLoading = ref(false)
 
 // Step 3: info
 const title = ref('')
@@ -30,7 +41,7 @@ const titleError = ref('')
 // Step 4: preview
 const publishLoading = ref(false)
 
-const selectVideo = (e: Event) => {
+const selectVideo = async (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   if (file.size > 500 * 1024 * 1024) {
@@ -39,25 +50,14 @@ const selectVideo = (e: Event) => {
   }
   videoFile.value = file
   error.value = ''
-}
 
-const uploadVideo = async () => {
-  if (!videoFile.value) return
-  loading.value = true
-  error.value = ''
+  // 自动开始切片上传
   try {
-    const fd = new FormData()
-    fd.append('file', videoFile.value)
-    // Simulate progress via axios interceptors isn't easy without ref
-    // We'll use a simple progress tracking approach
-    const resp = await videoService.uploadVideo(fd)
-    const d = resp.data.data
-    if (d) videoUrl.value = d.play_url
+    const result = await chunkedUpload(file)
+    videoUrl.value = result.playUrl
     step.value = 2
-  } catch (e: any) {
-    error.value = e.message || '上传失败'
-  } finally {
-    loading.value = false
+  } catch {
+    // error already set by composable
   }
 }
 
@@ -76,7 +76,7 @@ const skipCover = () => {
 
 const uploadCover = async () => {
   if (!coverFile.value) return
-  loading.value = true
+  coverLoading.value = true
   try {
     const fd = new FormData()
     fd.append('file', coverFile.value)
@@ -86,7 +86,7 @@ const uploadCover = async () => {
   } catch (e: any) {
     error.value = e.message || '上传失败'
   } finally {
-    loading.value = false
+    coverLoading.value = false
   }
   step.value = 3
   loadTags()
@@ -183,18 +183,62 @@ const publish = async () => {
     <div v-if="step === 1" class="step-content">
       <h2>上传视频</h2>
       <div class="upload-zone" :class="{ 'has-file': videoFile }">
-        <input type="file" accept=".mp4" @change="selectVideo" />
+        <input type="file" accept=".mp4" @change="selectVideo" :disabled="uploadStatus === 'uploading'" />
         <div v-if="!videoFile" class="upload-hint">
           <TFIcon name="videocam" :size="48" color="var(--text-secondary)" />
           <p>点击或拖拽上传 .mp4 视频，最大 500MB</p>
         </div>
-        <div v-else class="file-selected">
+        <div v-else-if="uploadStatus === 'uploading' || uploadStatus === 'merging'" class="file-selected">
+          <q-spinner color="accent" size="48px" />
+          <p>{{ videoFile.name }}</p>
+        </div>
+        <div v-else-if="uploadStatus === 'done'" class="file-selected">
           <TFIcon name="check_circle" :size="48" color="var(--accent)" />
           <p>{{ videoFile.name }}</p>
         </div>
+        <div v-else class="file-selected">
+          <TFIcon name="videocam" :size="48" color="var(--text-secondary)" />
+          <p>{{ videoFile.name }}</p>
+        </div>
       </div>
-      <p v-if="error" class="error-msg">{{ error }}</p>
-      <q-btn v-if="videoFile" class="next-btn" no-caps label="下一步" color="primary" @click="uploadVideo" :loading="loading" />
+
+      <!-- 上传进度条 -->
+      <div v-if="uploadStatus === 'uploading'" class="upload-progress">
+        <q-linear-progress
+          :value="uploadProgress / 100"
+          color="accent"
+          track-color="var(--bg-elevated)"
+          class="progress-bar"
+          rounded
+        />
+        <div class="progress-info">
+          <span class="progress-pct">{{ uploadProgress }}%</span>
+          <span v-if="uploadSpeed" class="progress-speed">{{ uploadSpeed }}</span>
+        </div>
+      </div>
+
+      <div v-if="uploadStatus === 'merging'" class="upload-progress">
+        <q-spinner color="accent" size="18px" />
+        <span class="progress-info-text">正在合并分片...</span>
+      </div>
+
+      <p v-if="error" class="error-msg">{{ uploadError || error }}</p>
+      <q-btn
+        v-if="uploadStatus === 'error'"
+        class="next-btn"
+        no-caps
+        label="重试"
+        color="primary"
+        @click="selectVideo({ target: { files: [videoFile] } } as any)"
+      />
+      <q-btn
+        v-if="uploadStatus === 'uploading'"
+        class="cancel-btn"
+        no-caps
+        flat
+        label="取消上传"
+        @click="cancelUpload()"
+      />
     </div>
 
     <!-- Step 2: Upload cover -->
@@ -468,10 +512,43 @@ const publish = async () => {
   border-radius: var(--radius-pill);
 }
 
+.upload-progress {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.progress-info-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.cancel-btn {
+  width: 100%;
+  margin-top: var(--space-3);
+  color: var(--text-secondary);
+}
+
 .error-msg {
   color: var(--text-negative);
   font-size: 14px;
   text-align: center;
+  margin-top: var(--space-2);
 }
 
 .preview-card {

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 
@@ -338,6 +339,146 @@ func (h *VideoHandler) RecordView(c *gin.Context) {
 		"user_id":  userID,
 		"client_ip": claims.ClientIP,
 		"video_id": claims.VideoID,
+	})
+}
+
+// @Summary 初始化切片上传
+// @Description 创建切片上传会话，返回 upload_id
+// @Tags 视频
+// @Security OAuth2Password
+// @Accept json
+// @Produce json
+// @Param body body object true "上传参数 {filename, file_size, chunk_size}"
+// @Success 201 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Router /api/v1/videos/upload/init [post]
+func (h *VideoHandler) InitChunkedUpload(c *gin.Context) {
+	var req struct {
+		Filename  string `json:"filename" binding:"required,min=1,max=255"`
+		FileSize  int64  `json:"file_size" binding:"required,min=1"`
+		ChunkSize int64  `json:"chunk_size"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	uploadID, err := h.video.InitChunkedUpload(c.Request.Context(), req.Filename, req.FileSize, req.ChunkSize)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Created(c, gin.H{
+		"upload_id": uploadID,
+	})
+}
+
+// @Summary 上传分片
+// @Description 上传视频的一个分片
+// @Tags 视频
+// @Security OAuth2Password
+// @Accept multipart/form-data
+// @Produce json
+// @Param upload_id formData string true "上传会话ID"
+// @Param chunk_index formData int true "分片序号"
+// @Param file formData file true "分片文件"
+// @Success 201 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Router /api/v1/videos/upload/chunk [post]
+func (h *VideoHandler) UploadChunk(c *gin.Context) {
+	uploadID := c.PostForm("upload_id")
+	chunkIndexStr := c.PostForm("chunk_index")
+	if uploadID == "" || chunkIndexStr == "" {
+		response.BadRequest(c, "missing upload_id or chunk_index")
+		return
+	}
+
+	chunkIndex, err := strconv.Atoi(chunkIndexStr)
+	if err != nil {
+		response.BadRequest(c, "invalid chunk_index")
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		response.BadRequest(c, "missing chunk file")
+		return
+	}
+
+	// Validate chunk size matches session expectation
+	session, err := h.video.GetUploadStatus(c.Request.Context(), uploadID)
+	if err == nil && file.Size > session.ChunkSize {
+		response.BadRequest(c, fmt.Sprintf("chunk size exceeds limit: %d > %d", file.Size, session.ChunkSize))
+		return
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		response.InternalServerError(c, err.Error())
+		return
+	}
+	defer src.Close()
+
+	if err := h.video.UploadChunk(c.Request.Context(), uploadID, chunkIndex, src); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Created(c, gin.H{"chunk_index": chunkIndex})
+}
+
+// @Summary 查询上传进度
+// @Description 查询切片上传会话的当前状态（用于断点续传）
+// @Tags 视频
+// @Security OAuth2Password
+// @Produce json
+// @Param upload_id path string true "上传会话ID"
+// @Success 200 {object} response.Response
+// @Failure 404 {object} response.Response
+// @Router /api/v1/videos/upload/status/{upload_id} [get]
+func (h *VideoHandler) GetUploadStatus(c *gin.Context) {
+	uploadID := c.Param("upload_id")
+	session, err := h.video.GetUploadStatus(c.Request.Context(), uploadID)
+	if err != nil {
+		response.NotFound(c, "upload session not found")
+		return
+	}
+
+	response.Success(c, session)
+}
+
+// @Summary 完成切片上传
+// @Description 合并所有分片，返回视频播放URL和元信息
+// @Tags 视频
+// @Security OAuth2Password
+// @Accept json
+// @Produce json
+// @Param body body object true "{upload_id}"
+// @Success 201 {object} response.Response
+// @Failure 400 {object} response.Response
+// @Router /api/v1/videos/upload/complete [post]
+func (h *VideoHandler) CompleteChunkedUpload(c *gin.Context) {
+	var req struct {
+		UploadID string `json:"upload_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	url, meta, err := h.video.CompleteChunkedUpload(c.Request.Context(), req.UploadID)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Created(c, gin.H{
+		"play_url":    url,
+		"duration":    meta.Duration,
+		"width":       meta.Width,
+		"height":      meta.Height,
+		"is_vertical": meta.IsVertical,
 	})
 }
 
