@@ -4,15 +4,19 @@ import { useRoute, useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
 import UserInfoCard from '../components/user/UserInfoCard.vue'
 import FollowButton from '../components/user/FollowButton.vue'
+import TFIcon from '../components/common/TFIcon.vue'
 import UserVideoTab from '../components/user/UserVideoTab.vue'
 import UserLikedTab from '../components/user/UserLikedTab.vue'
+import UserSettingsTab from '../components/user/UserSettingsTab.vue'
 import * as userService from '../services/user'
 import type { UserProfile, VideoItem } from '../types'
 import { useAuthStore } from '../stores/auth'
+import { useInteractionStore } from '../stores/interaction'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const interactionStore = useInteractionStore()
 const $q = useQuasar()
 
 // 安全获取用户 ID，无效则重定向
@@ -26,7 +30,7 @@ const userId = computed(() => {
 })
 
 const profile = ref<UserProfile | null>(null)
-const activeTab = ref<'videos' | 'liked'>('videos')
+const activeTab = ref<'videos' | 'liked' | 'settings'>('videos')
 const loading = ref(true)
 
 const isMe = computed(() => authStore.accountId === userId.value)
@@ -34,7 +38,7 @@ const isMe = computed(() => authStore.accountId === userId.value)
 const fetchProfile = async () => {
   const id = userId.value
   if (!id) {
-    $q.notify({ type: 'negative', message: '无效的用户ID', position: 'top' })
+    $q.notify({ color: 'red-8', textColor: 'white', message: '无效的用户ID', position: 'top' })
     router.push('/')
     return
   }
@@ -45,12 +49,16 @@ const fetchProfile = async () => {
     const d = resp.data.data
     if (d) {
       profile.value = d
+      // 同步关注状态到 interaction store
+      if (d.is_following) {
+        interactionStore.syncFollow(d.id)
+      }
     } else {
       throw new Error('用户不存在')
     }
   } catch (error) {
     console.error('获取用户资料失败', error)
-    $q.notify({ type: 'negative', message: '用户不存在或网络错误', position: 'top' })
+    $q.notify({ color: 'red-8', textColor: 'white', message: '用户不存在或网络错误', position: 'top' })
     router.push('/')
   } finally {
     loading.value = false
@@ -74,20 +82,32 @@ onMounted(() => fetchProfile())
       />
 
       <div v-if="!isMe" class="profile-follow-btn">
-        <FollowButton v-if="userId !== null" :userId="userId" />
+        <FollowButton
+          v-if="userId !== null"
+          :userId="userId"
+          :isFollowingMe="profile?.is_following_me ?? false"
+        />
+        <button class="message-btn" @click="router.push(`/messages/${userId}`)">
+          <TFIcon name="chat_bubble" :size="18" />
+          <span>私信</span>
+        </button>
       </div>
 
       <div class="user-tabs">
         <button class="tab-btn" :class="{ active: activeTab === 'videos' }" @click="activeTab = 'videos'">
           作品
         </button>
-        <button v-if="isMe" class="tab-btn" :class="{ active: activeTab === 'liked' }" @click="activeTab = 'liked'">
-          我赞过的
+        <button v-if="isMe || profile.likes_public" class="tab-btn" :class="{ active: activeTab === 'liked' }" @click="activeTab = 'liked'">
+          {{ isMe ? '我赞过的' : '赞过的' }}
+        </button>
+        <button v-if="isMe" class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
+          设置
         </button>
       </div>
 
       <UserVideoTab v-if="activeTab === 'videos' && userId !== null" :userId="userId" />
-      <UserLikedTab v-if="activeTab === 'liked'" />
+      <UserLikedTab v-if="activeTab === 'liked'" :userId="userId ?? undefined" />
+      <UserSettingsTab v-if="activeTab === 'settings'" />
     </template>
   </div>
 </template>
@@ -109,7 +129,26 @@ onMounted(() => fetchProfile())
 .profile-follow-btn {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: var(--space-3);
   margin: var(--space-4) 0;
+}
+
+.message-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  color: #000;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  padding: 8px 28px;
+  border: none;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+
+  &:hover { opacity: 0.85; }
 }
 
 .user-tabs {

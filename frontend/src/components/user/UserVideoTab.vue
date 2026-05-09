@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../stores/auth'
 import * as userService from '../../services/user'
 import type { VideoItem } from '../../types'
 import TFIcon from '../common/TFIcon.vue'
@@ -10,6 +11,8 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const authStore = useAuthStore()
+const isOwner = computed(() => authStore.accountId === props.userId)
 const items = ref<VideoItem[]>([])
 const cursor = ref<string | null>(null)
 const hasMore = ref(true)
@@ -37,6 +40,11 @@ const load = async (reset = false) => {
   } finally {
     loading.value = false
   }
+}
+
+const goEdit = (e: Event, videoId: number) => {
+  e.stopPropagation()
+  router.push(`/video/${videoId}/edit`)
 }
 
 onMounted(() => load())
@@ -74,6 +82,13 @@ const formatCount = (n: number) => {
             <TFIcon name="visibility" :size="12" />
             {{ formatCount(item.view_count ?? 0) }}
           </div>
+          <button
+            v-if="isOwner"
+            class="edit-btn"
+            @click="goEdit($event, item.video_id)"
+          >
+            <TFIcon name="edit" :size="16" />
+          </button>
         </div>
       </div>
     </div>
@@ -138,6 +153,7 @@ const formatCount = (n: number) => {
 
 .card-info {
   padding: var(--space-2);
+  position: relative;
 }
 
 .card-title {
@@ -156,6 +172,26 @@ const formatCount = (n: number) => {
   color: var(--text-secondary);
   display: flex;
   gap: var(--space-2);
+}
+
+.edit-btn {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
+
+  &:hover {
+    color: var(--accent);
+    background: rgba(255, 255, 255, 0.08);
+  }
 }
 
 .loading-state, .load-more, .no-more {

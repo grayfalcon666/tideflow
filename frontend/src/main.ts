@@ -1,5 +1,5 @@
 import { createApp } from 'vue'
-import { Quasar, Notify } from 'quasar'
+import { Quasar, Notify, Dialog } from 'quasar'
 import App from './App.vue'
 import router from './router'
 import pinia from './stores'
@@ -13,7 +13,7 @@ import './styles/global.css'
 const app = createApp(App)
 
 app.use(Quasar, {
-  plugins: { Notify },  // ← 注册 Notify
+  plugins: { Notify, Dialog },
 })
 app.use(pinia)
 

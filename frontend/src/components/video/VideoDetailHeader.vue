@@ -19,7 +19,7 @@ defineEmits<{ back: [] }>()
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  padding: 0.1px var(--space-4);
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
   position: sticky;

@@ -9,6 +9,8 @@ docs
 # Claude
 .claude/
 
+.playwright-mcp/
+
 # Go
 backend/vendor/
 backend/worker

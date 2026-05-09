@@ -7,6 +7,7 @@ import * as userService from '../../services/user'
 import { useAuthStore } from '../../stores/auth'
 import { useInteractionStore } from '../../stores/interaction'
 import TFIcon from '../common/TFIcon.vue'
+import ShareMenu from './ShareMenu.vue'
 
 const props = defineProps<{
   video: VideoDetail
@@ -38,8 +39,15 @@ const toggleLike = async () => {
       likesCount.value = r.data.data!.likes_count
     }
   } catch {
+    // 回滚乐观更新
     interactionStore.toggleLike(props.video.video_id)
     likesCount.value += was ? 1 : -1
+    // Pinia 可能过期，从服务端拉取最新点赞列表重新同步
+    try {
+      const resp = await videoService.getMyLiked(undefined, 200)
+      const items = resp.data.data?.items ?? []
+      interactionStore.replaceLikes(items.map((v: any) => v.id))
+    } catch {}
   }
 }
 
@@ -70,13 +78,14 @@ const formatCount = (n: number) => {
   return String(n)
 }
 
-const share = async () => {
-  const url = window.location.href
-  if (navigator.share) {
-    await navigator.share({ url, title: props.video.title })
-  } else {
-    await navigator.clipboard.writeText(url)
+const showShareMenu = ref(false)
+
+const share = () => {
+  if (!authStore.isLoggedIn) {
+    router.push('/account')
+    return
   }
+  showShareMenu.value = true
 }
 </script>
 
@@ -135,6 +144,14 @@ const share = async () => {
         <span>分享</span>
       </div>
     </div>
+
+    <ShareMenu
+      v-model="showShareMenu"
+      :videoId="video.video_id"
+      :videoTitle="video.title"
+      :videoCover="video.cover_url"
+      :authorName="video.author.username"
+    />
   </div>
 </template>
 

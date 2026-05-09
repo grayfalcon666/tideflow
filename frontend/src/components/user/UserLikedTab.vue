@@ -2,8 +2,15 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as videoService from '../../services/video'
+import { useAuthStore } from '../../stores/auth'
 import type { VideoItem } from '../../types'
 import TFIcon from '../common/TFIcon.vue'
+
+const props = defineProps<{
+  userId?: number
+}>()
+
+const authStore = useAuthStore()
 
 type RawVideoItem = {
   id: number
@@ -62,6 +69,8 @@ const cursor = ref<string | null>(null)
 const hasMore = ref(true)
 const loading = ref(false)
 
+const isOwner = () => !props.userId || props.userId === authStore.accountId
+
 const load = async (reset = false) => {
   if (loading.value) return
   loading.value = true
@@ -71,7 +80,9 @@ const load = async (reset = false) => {
       cursor.value = null
       hasMore.value = true
     }
-    const resp = await videoService.getMyLiked(cursor.value ?? undefined, 10)
+    const resp = isOwner()
+      ? await videoService.getMyLiked(cursor.value ?? undefined, 10)
+      : await videoService.getUserLikedVideos(props.userId!, cursor.value ?? undefined, 10)
     const d = resp.data.data
     if (!d) return
     if (reset) {

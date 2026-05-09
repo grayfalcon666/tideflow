@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import FeedTabBar from '../components/feed/FeedTabBar.vue'
 import FeedSwiper from '../components/feed/FeedSwiper.vue'
 import FeedSlideContent from '../components/feed/FeedSlideContent.vue'
 import CommentDrawer from '../components/comment/CommentDrawer.vue'
+import NotePanel from '../components/note/NotePanel.vue'
+import ShareMenu from '../components/video/ShareMenu.vue'
 import BottomNav from '../components/layout/BottomNav.vue'
 import { useVideoControls } from '../composables/useVideoControls'
 import { useFeedStore, type FeedTab } from '../stores/feed'
 import { useAuthStore } from '../stores/auth'
 import { useNotificationStore } from '../stores/notification'
-import type { VideoItem } from '../types'
+import { useSettingsStore } from '../stores/settings'
+import * as noteService from '../services/note'
+import type { VideoItem, RawNote } from '../types'
 
 const router = useRouter()
 const feedStore = useFeedStore()
 const authStore = useAuthStore()
 const notifStore = useNotificationStore()
+const settingsStore = useSettingsStore()
 
 const isMobile = ref(window.innerWidth < 1024)
 const onResize = () => { isMobile.value = window.innerWidth < 1024 }
@@ -24,7 +29,18 @@ const activeTab = ref<FeedTab>('latest')
 const activeIndex = ref(0)
 const commentDrawerOpen = ref(false)
 const commentVideoId = ref(0)
+const shareMenuOpen = ref(false)
+const shareVideoId = ref(0)
+const shareVideoTitle = ref('')
+const shareVideoCover = ref('')
+const shareAuthorName = ref('')
+const notePanelOpen = ref(false)
+const noteVideoId = ref(0)
+const feedPlayerTime = ref(0)
+const noteTimestampsMap = ref<Record<number, number[]>>({})
+let timePollTimer: ReturnType<typeof setInterval> | null = null
 const playToken = ref<string | null>(null)
+let pendingRestoreIndex = 0
 
 // Play token from current video item for tracking
 const currentPlayToken = computed(() => {
@@ -57,6 +73,105 @@ const onTabChange = (tab: FeedTab) => {
 }
 
 const swiperRef = ref()
+
+// Note panel helpers
+const noteTimestamps = computed(() => {
+  const id = items.value[activeIndex.value]?.video_id
+  return id ? (noteTimestampsMap.value[id] ?? []) : []
+})
+
+const noteCount = computed(() => {
+  const id = items.value[activeIndex.value]?.video_id
+  return id ? (noteTimestampsMap.value[id]?.length ?? 0) : 0
+})
+
+const fetchFeedNoteTimestamps = async (videoId: number) => {
+  if (noteTimestampsMap.value[videoId]) return
+  try {
+    const resp = await noteService.getNotes(videoId, '0', 200)
+    const rawItems = (resp.data.data?.items ?? []) as RawNote[]
+    noteTimestampsMap.value[videoId] = rawItems.map((n: RawNote) => n.timestamp)
+  } catch {}
+}
+
+const startTimePoll = () => {
+  if (timePollTimer) return
+  timePollTimer = setInterval(() => {
+    if (!notePanelOpen.value) return
+    const player = getActivePlayer()
+    if (player) {
+      feedPlayerTime.value = player.getCurrentTime?.() ?? 0
+    }
+  }, 500)
+}
+
+const stopTimePoll = () => {
+  if (timePollTimer) {
+    clearInterval(timePollTimer)
+    timePollTimer = null
+  }
+}
+
+const handleShare = (item: any) => {
+  shareVideoId.value = item.video_id ?? item.id
+  shareVideoTitle.value = item.title ?? ''
+  shareVideoCover.value = item.cover_url ?? ''
+  shareAuthorName.value = item.author?.username ?? item.username ?? ''
+  shareMenuOpen.value = true
+}
+
+const handleOpenNotes = (videoId: number) => {
+  noteVideoId.value = videoId
+  notePanelOpen.value = true
+  fetchFeedNoteTimestamps(videoId)
+  startTimePoll()
+}
+
+const handleFeedNoteSeek = (timestamp: number) => {
+  const player = getActivePlayer()
+  player?.seekTo?.(timestamp)
+}
+
+// Fetch note timestamps + poll for current video
+watch(notePanelOpen, (val) => {
+  if (val && noteVideoId.value) {
+    fetchFeedNoteTimestamps(noteVideoId.value)
+    startTimePoll()
+  } else {
+    stopTimePoll()
+  }
+})
+
+watch(activeIndex, () => {
+  const id = items.value[activeIndex.value]?.video_id
+  if (id) {
+    fetchFeedNoteTimestamps(id)
+  }
+  if (notePanelOpen.value && noteVideoId.value) {
+    if (id && id !== noteVideoId.value) {
+      noteVideoId.value = id
+    }
+  }
+})
+
+// 数据加载完成后恢复上次位置
+watch(() => items.value.length, (len) => {
+  if (len > 0 && pendingRestoreIndex > 0) {
+    const idx = Math.min(pendingRestoreIndex, len - 1)
+    activeIndex.value = idx
+    pendingRestoreIndex = 0
+    // 确保 swiper 滚动到正确位置，同时暂停非活跃播放器
+    nextTick(() => {
+      swiperRef.value?.scrollToIndex?.(idx)
+      setTimeout(() => pauseAllExcept(idx), 200)
+    })
+  }
+})
+
+watch([activeIndex, activeTab], () => {
+  settingsStore.savePosition(activeIndex.value, activeTab.value)
+})
+
 const { isMuted } = useVideoControls((key) => {
   if (key === 'c' || key === 'C') {
     const id = items.value[activeIndex.value]?.video_id
@@ -71,16 +186,18 @@ watch(activeIndex, (newIdx, oldIdx) => {
   if (newIdx >= items.value.length - 3 && hasMore.value && !isLoading.value) {
     feedStore.loadMore(activeTab.value)
   }
-  // Pause previous video, play current video
-  if (oldIdx !== undefined && oldIdx !== newIdx) {
-    const prevPlayer = getPlayerAtIndex(oldIdx)
-    prevPlayer?.pause()
-  }
+  // Pause all except current
+  pauseAllExcept(newIdx)
   const currPlayer = getPlayerAtIndex(newIdx)
   currPlayer?.play()
 })
 
 onMounted(() => {
+  // 恢复上次刷到的位置 —— 先记录目标位置，等数据加载完再跳转
+  if (settingsStore.rememberPosition && settingsStore.lastActiveIndex > 0) {
+    activeTab.value = settingsStore.lastActiveTab
+    pendingRestoreIndex = settingsStore.lastActiveIndex
+  }
   loadData()
   window.addEventListener('keydown', onKeyDown)
   if (authStore.isLoggedIn) {
@@ -100,8 +217,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  pauseAllPlayers()
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('resize', onResize)
+  stopTimePoll()
 })
 
 const getActivePlayer = () => {
@@ -112,6 +231,25 @@ const getPlayerAtIndex = (idx: number) => {
   const slides = swiperRef.value?.$el?.querySelectorAll('.feed-slide')
   const slide = slides?.[idx]
   return (slide?.querySelector('.video-player') as any)?.__vueParentComponent?.exposed
+}
+
+const pauseAllExcept = (exceptIdx: number) => {
+  const slides = swiperRef.value?.$el?.querySelectorAll('.feed-slide')
+  if (!slides) return
+  slides.forEach((slide: Element, i: number) => {
+    if (i === exceptIdx) return
+    const player = (slide.querySelector('.video-player') as any)?.__vueParentComponent?.exposed
+    player?.pause()
+  })
+}
+
+const pauseAllPlayers = () => {
+  const slides = swiperRef.value?.$el?.querySelectorAll('.feed-slide')
+  if (!slides) return
+  slides.forEach((slide: Element) => {
+    const player = (slide.querySelector('.video-player') as any)?.__vueParentComponent?.exposed
+    player?.pause()
+  })
 }
 
 // Keyboard shortcuts
@@ -141,6 +279,13 @@ const onKeyDown = (e: KeyboardEvent) => {
         commentDrawerOpen.value = true
       }
       break
+    case 'n':
+    case 'N':
+      const nid = items.value[activeIndex.value]?.video_id
+      if (nid) {
+        handleOpenNotes(nid)
+      }
+      break
     case 'f':
     case 'F':
       player?.toggleFullscreen?.()
@@ -160,7 +305,7 @@ const onKeyDown = (e: KeyboardEvent) => {
   <div class="feed-page">
     <FeedTabBar :activeTab="activeTab" @update:tab="onTabChange" />
 
-    <div class="feed-swiper-wrap" :class="{ 'compressed': commentDrawerOpen }">
+    <div class="feed-swiper-wrap" :class="{ 'compressed': commentDrawerOpen || notePanelOpen }">
       <FeedSwiper
         ref="swiperRef"
         :items="items"
@@ -173,7 +318,12 @@ const onKeyDown = (e: KeyboardEvent) => {
             :item="item"
             :active="active"
             :muted="isMuted"
+            :noteTimestamps="noteTimestamps"
+            :noteCount="noteCount"
             @openComments="(videoId) => { commentVideoId = videoId; commentDrawerOpen = true }"
+            @openNotes="(videoId) => handleOpenNotes(videoId)"
+            @share="(videoId: number) => handleShare(item)"
+            @timeupdate="notePanelOpen && (feedPlayerTime = getActivePlayer()?.getCurrentTime?.() ?? 0)"
           />
         </template>
       </FeedSwiper>
@@ -185,6 +335,22 @@ const onKeyDown = (e: KeyboardEvent) => {
       v-model="commentDrawerOpen"
       :videoId="commentVideoId"
       seamless
+    />
+
+    <NotePanel
+      v-model="notePanelOpen"
+      :videoId="noteVideoId"
+      :currentTime="feedPlayerTime"
+      position="right"
+      @seek="handleFeedNoteSeek"
+    />
+
+    <ShareMenu
+      v-model="shareMenuOpen"
+      :videoId="shareVideoId"
+      :videoTitle="shareVideoTitle"
+      :videoCover="shareVideoCover"
+      :authorName="shareAuthorName"
     />
   </div>
 </template>
@@ -213,7 +379,6 @@ const onKeyDown = (e: KeyboardEvent) => {
 
   &.compressed {
     width: 70%;
-    transition: width 0.3s ease;
   }
 }
 </style>

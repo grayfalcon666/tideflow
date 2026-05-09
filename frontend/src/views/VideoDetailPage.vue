@@ -7,18 +7,25 @@ import VideoDetailHeader from '../components/video/VideoDetailHeader.vue'
 import VideoMetaSection from '../components/video/VideoMetaSection.vue'
 import VideoCommentPreview from '../components/video/VideoCommentPreview.vue'
 import CommentDrawer from '../components/comment/CommentDrawer.vue'
+import NotePanel from '../components/note/NotePanel.vue'
 import { useVideoControls } from '../composables/useVideoControls'
 import * as videoService from '../services/video'
+import * as noteService from '../services/note'
 import { useInteractionStore } from '../stores/interaction'
-import type { VideoDetail } from '../types'
+import type { VideoDetail, RawNote } from '../types'
 import TFIcon from '../components/common/TFIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
 const video = ref<VideoDetail | null>(null)
+const isDeleted = ref(false)
 const loading = ref(true)
 const error = ref('')
 const showDrawer = ref(false)
+const showNotePanel = ref(false)
+const videoPlayerRef = ref<InstanceType<typeof VideoPlayer>>()
+const playerCurrentTime = ref(0)
+const playerNoteTimestamps = ref<number[]>([])
 
 const { isMuted } = useVideoControls((key) => {
   if (key === 'c' || key === 'C') {
@@ -40,6 +47,22 @@ const handleCompletionReported = async (token?: string) => {
   } catch {}
 }
 
+const handleTimeUpdate = () => {
+  playerCurrentTime.value = videoPlayerRef.value?.getCurrentTime() ?? 0
+}
+
+const handleNoteSeek = (timestamp: number) => {
+  videoPlayerRef.value?.seekTo(timestamp)
+}
+
+const fetchNoteTimestamps = async () => {
+  try {
+    const resp = await noteService.getNotes(videoId, '0', 200)
+    const items = (resp.data.data?.items ?? []) as RawNote[]
+    playerNoteTimestamps.value = items.map((n: RawNote) => n.timestamp)
+  } catch {}
+}
+
 const videoId = Number(route.params.id)
 
 const fetchVideo = async () => {
@@ -47,6 +70,11 @@ const fetchVideo = async () => {
     const resp = await videoService.getVideo(videoId)
     const d = resp.data.data
     if (d) {
+      if ((d as any).is_deleted) {
+        isDeleted.value = true
+        loading.value = false
+        return
+      }
       // Normalize: backend returns "id" but components expect "video_id"
       video.value = { ...d, video_id: d.id } as VideoDetail
       // sync with persisted interaction store
@@ -65,6 +93,7 @@ const fetchVideo = async () => {
 
 onMounted(async () => {
   await fetchVideo()
+  fetchNoteTimestamps()
 })
 </script>
 
@@ -74,8 +103,14 @@ onMounted(async () => {
       <q-spinner color="accent" size="48px" />
     </div>
 
+    <div v-else-if="isDeleted" class="error-state">
+      <TFIcon name="delete" :size="48" color="var(--text-secondary)" />
+      <p>视频已删除</p>
+      <q-btn flat no-caps label="返回首页" @click="router.push('/')" />
+    </div>
+
     <div v-else-if="error" class="error-state">
-      <TFIcon name="error_outline" :size="48" color="var(--text-negative)" />
+      <TFIcon name="error_outline" :size="48" color="#ef4444" />
       <p>{{ error }}</p>
       <q-btn flat no-caps label="返回首页" @click="router.push('/')" />
     </div>
@@ -85,6 +120,7 @@ onMounted(async () => {
 
       <VideoPlayerContainer :fixedRatio="true">
         <VideoPlayer
+          ref="videoPlayerRef"
           :src="video.play_url"
           :poster="video.cover_url"
           :muted="isMuted"
@@ -94,12 +130,21 @@ onMounted(async () => {
           :duration="video.duration"
           :playToken="video.play_token"
           :videoId="videoId"
+          :noteTimestamps="playerNoteTimestamps"
           @viewReported="handleViewReported(video.play_token)"
           @completionReported="handleCompletionReported(video.play_token)"
+          @timeupdate="handleTimeUpdate"
         />
       </VideoPlayerContainer>
 
       <VideoMetaSection :video="video" />
+
+      <!-- Note entry (above comments) -->
+      <div class="note-entry" @click="showNotePanel = true">
+        <TFIcon name="sticky_note_2" :size="20" color="var(--text-secondary)" />
+        <span class="note-entry-label">时间轴笔记</span>
+        <TFIcon name="chevron_right" :size="20" color="var(--text-muted)" />
+      </div>
 
       <VideoCommentPreview
         :videoId="videoId"
@@ -110,6 +155,13 @@ onMounted(async () => {
       <CommentDrawer
         v-model="showDrawer"
         :videoId="videoId"
+      />
+
+      <NotePanel
+        v-model="showNotePanel"
+        :videoId="videoId"
+        :currentTime="playerCurrentTime"
+        @seek="handleNoteSeek"
       />
     </template>
   </div>
@@ -122,6 +174,26 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   background: var(--bg-base);
+}
+
+.note-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color-light, rgba(0,0,0,0.04));
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.note-entry-label {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 
 .loading-state,

@@ -5,10 +5,18 @@ import { useInteractionStore } from '../../stores/interaction'
 
 const props = defineProps<{
   userId: number
+  isFollowingMe?: boolean
 }>()
 
 const interactionStore = useInteractionStore()
 const following = computed(() => interactionStore.isFollowing(props.userId))
+const isMutual = computed(() => following.value && props.isFollowingMe)
+
+const followLabel = computed(() => {
+  if (isMutual.value) return '互关'
+  if (following.value) return '已关注'
+  return '关注'
+})
 
 const toggle = async () => {
   const was = following.value
@@ -28,8 +36,8 @@ const toggle = async () => {
 <template>
   <q-btn
     no-caps
-    :label="following ? '已关注' : '关注'"
-    :class="['follow-btn', { 'follow-btn--following': following }]"
+    :label="followLabel"
+    :class="['follow-btn', { 'follow-btn--following': following || isMutual }]"
     @click="toggle"
   />
 </template>

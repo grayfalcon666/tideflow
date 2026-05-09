@@ -9,10 +9,15 @@ defineProps<{
   item: any
   active: boolean
   muted?: boolean
+  noteTimestamps?: number[]
+  noteCount?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'openComments', videoId: number): void
+  (e: 'openNotes', videoId: number): void
+  (e: 'share', videoId: number): void
+  (e: 'timeupdate'): void
 }>()
 </script>
 
@@ -29,6 +34,8 @@ const emit = defineEmits<{
           :duration="item?.duration"
           :playToken="item?.play_token"
           :videoId="item?.video_id"
+          :noteTimestamps="noteTimestamps"
+          @timeupdate="emit('timeupdate')"
         />
       </VideoPlayerContainer>
 
@@ -39,7 +46,7 @@ const emit = defineEmits<{
       <SlideInfoBar :item="item" />
     </div>
     <div class="slide-overlay-actions">
-      <SlideActionBar :item="item" @openComments="emit('openComments', item?.video_id)" />
+      <SlideActionBar :item="item" :noteCount="noteCount ?? 0" @openComments="emit('openComments', item?.video_id)" @openNotes="emit('openNotes', item?.video_id)" @share="emit('share', item?.video_id)" />
     </div>
   </div>
 </template>
@@ -60,7 +67,7 @@ const emit = defineEmits<{
   position: absolute;
   top: var(--space-4);
   right: var(--space-4);
-  z-index: 2;
+  z-index: 20;
 }
 
 .slide-overlay-info {
@@ -68,13 +75,13 @@ const emit = defineEmits<{
   bottom: 80px;
   left: 0;
   right: 80px;
-  z-index: 2;
+  z-index: 20;
 }
 
 .slide-overlay-actions {
   position: absolute;
   right: var(--space-4);
   bottom: 100px;
-  z-index: 2;
+  z-index: 20;
 }
 </style>

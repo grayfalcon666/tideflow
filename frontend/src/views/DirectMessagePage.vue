@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import * as messageService from '../services/message'
-import type { Message } from '../types'
+import type { Message, VideoSharePayload } from '../types'
 import TFIcon from '../components/common/TFIcon.vue'
 
 const route = useRoute()
@@ -16,6 +16,7 @@ const normalizeMessage = (m: any): Message => ({
   from_id: m.from_id,
   to_id: m.to_id,
   content: m.content,
+  msg_type: m.msg_type ?? 'text',
   created_at: typeof m.created_at === 'string' ? new Date(m.created_at).getTime() / 1000 : m.created_at,
   is_read: m.is_read,
 })
@@ -93,6 +94,26 @@ onUnmounted(() => {
   }
 })
 
+const parseVideoShare = (m: Message): VideoSharePayload | null => {
+  if (m.msg_type !== 'video_share') return null
+  try {
+    const parsed = JSON.parse(m.content)
+    if (parsed.video_id) return parsed as VideoSharePayload
+  } catch {}
+  return null
+}
+
+const goToVideo = (videoId: number) => {
+  router.push(`/video/${videoId}`)
+}
+
+const messagesWithShare = computed(() =>
+  messages.value.map((m) => ({
+    ...m,
+    videoShare: parseVideoShare(m),
+  }))
+)
+
 const isMine = (m: Message) => m.from_id === authStore.accountId
 </script>
 
@@ -115,12 +136,19 @@ const isMine = (m: Message) => m.from_id === authStore.accountId
       </div>
 
       <div
-        v-for="m in messages"
+        v-for="m in messagesWithShare"
         :key="m.id"
         class="message-bubble"
         :class="{ mine: isMine(m), theirs: !isMine(m) }"
       >
-        <div class="bubble-content">{{ m.content }}</div>
+        <div v-if="m.videoShare" class="video-share-card" @click="goToVideo(m.videoShare.video_id)">
+          <img :src="m.videoShare.cover_url" class="video-share-cover" />
+          <div class="video-share-info">
+            <span class="video-share-title">{{ m.videoShare.title }}</span>
+            <span class="video-share-author">@{{ m.videoShare.author_name }}</span>
+          </div>
+        </div>
+        <div v-else class="bubble-content">{{ m.content }}</div>
         <div class="bubble-time">{{ new Date(m.created_at * 1000).toLocaleTimeString() }}</div>
       </div>
     </div>
@@ -259,5 +287,56 @@ const isMine = (m: Message) => m.from_id === authStore.accountId
     background: var(--bg-elevated);
     border-radius: var(--radius-pill);
   }
+}
+
+.video-share-card {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  max-width: 260px;
+  transition: background var(--transition-fast);
+
+  .mine & {
+    background: rgba(0, 0, 0, 0.2);
+  }
+  .theirs & {
+    background: var(--bg-surface);
+  }
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+}
+
+.video-share-cover {
+  width: 60px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.video-share-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.video-share-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-share-author {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 </style>

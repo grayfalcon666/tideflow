@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 
+const MUTED_STORAGE_KEY = 'tideflow-video-muted'
+
+const loadMutedPref = (): boolean => {
+  try {
+    const v = localStorage.getItem(MUTED_STORAGE_KEY)
+    if (v === null) return false
+    return v === 'true'
+  } catch {
+    return false
+  }
+}
+
 const props = defineProps<{
   src: string
   poster?: string
@@ -11,6 +23,7 @@ const props = defineProps<{
   duration?: number
   playToken?: string
   videoId?: number
+  noteTimestamps?: number[]
 }>()
 
 const emit = defineEmits<{
@@ -20,6 +33,7 @@ const emit = defineEmits<{
   dblclick: []
   viewReported: []
   completionReported: []
+  timeupdate: []
 }>()
 
 // Tracking flags - reset when src changes
@@ -35,21 +49,29 @@ const viewThreshold = computed(() => {
 const videoEl = ref<HTMLVideoElement>()
 const videoContainerRef = ref<HTMLDivElement>()
 const isPlaying = ref(false)
-const isMuted = ref(props.muted ?? true)
+const isMuted = ref(props.muted ?? loadMutedPref())
 const showPoster = ref(true)
 const showPlayIndicator = ref(false)
 const showMuteState = ref(false)
 const showVolumeSlider = ref(false)
 const volume = ref(1)
 
-// Seek preview
+// Seek preview (swipe)
 const showSeekIndicator = ref(false)
 const seekDelta = ref(0)
 const seekIndicatorText = ref('')
 
+// Tap seek (double-tap left/right)
+const showTapSeekIndicator = ref(false)
+const tapSeekDirection = ref<'left' | 'right'>('left')
+const tapSeekDelta = ref(0)
+let leftTapTimer: ReturnType<typeof setTimeout> | null = null
+let rightTapTimer: ReturnType<typeof setTimeout> | null = null
+
 // Progress / controls
 const duration = ref(0)
 const currentTime = ref(0)
+const buffered = ref(0)
 const showControls = ref(true)
 let hideControlsTimer: ReturnType<typeof setTimeout> | null = null
 let clickTimer: ReturnType<typeof setTimeout> | null = null
@@ -57,6 +79,25 @@ let indicatorTimer: ReturnType<typeof setTimeout> | null = null
 
 // Fullscreen
 const isFullscreen = ref(false)
+
+// Buffered percentage
+const bufferedPercent = computed(() => {
+  if (!duration.value) return 0
+  return Math.min((buffered.value / duration.value) * 100, 100)
+})
+
+// Played progress percentage
+const progressPercent = computed(() => {
+  if (!duration.value) return 0
+  return (currentTime.value / duration.value) * 100
+})
+
+const formatTime = (seconds: number) => {
+  if (!isFinite(seconds) || seconds < 0) return '0:00'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
 
 // Aspect ratio for CSS aspect-ratio property
 const cssAspectRatio = computed(() => {
@@ -81,6 +122,11 @@ watch(() => props.muted, (muted) => {
   isMuted.value = muted
   if (videoEl.value) videoEl.value.muted = muted
   showMuteIndicator()
+})
+
+// 持久化静音偏好
+watch(isMuted, (val) => {
+  try { localStorage.setItem(MUTED_STORAGE_KEY, String(val)) } catch {}
 })
 
 const play = () => {
@@ -133,8 +179,37 @@ const handleClick = () => {
   }
 }
 
-// Progress bar: seek
+// Double-tap left/right to seek ±5s (YouTube-style)
+const handleSeekTap = (direction: 'left' | 'right') => {
+  if (isDragging || !duration.value) return
+  const timer = direction === 'left' ? leftTapTimer : rightTapTimer
+  if (timer) {
+    // Double-tap confirmed
+    clearTimeout(timer)
+    if (direction === 'left') leftTapTimer = null
+    else rightTapTimer = null
+    const delta = direction === 'left' ? -5 : 5
+    if (videoEl.value) {
+      videoEl.value.currentTime = Math.max(0, Math.min(videoEl.value.currentTime + delta, duration.value))
+      currentTime.value = videoEl.value.currentTime
+      resetHideTimer()
+    }
+    tapSeekDirection.value = direction
+    tapSeekDelta.value = delta
+    showTapSeekIndicator.value = true
+    setTimeout(() => { showTapSeekIndicator.value = false }, 600)
+  } else {
+    if (direction === 'left') {
+      leftTapTimer = setTimeout(() => { leftTapTimer = null }, 300)
+    } else {
+      rightTapTimer = setTimeout(() => { rightTapTimer = null }, 300)
+    }
+  }
+}
+
+// Progress bar: seek (only handle user-initiated input events)
 const seekTo = (e: Event) => {
+  if (!e.isTrusted) return // Ignore programmatic value changes on mobile
   const video = videoEl.value!
   video.currentTime = parseFloat((e.target as HTMLInputElement).value)
   currentTime.value = video.currentTime
@@ -186,6 +261,15 @@ defineExpose({
       resetHideTimer()
     }
   },
+  getCurrentTime: () => currentTime.value,
+  getDuration: () => duration.value,
+  seekTo: (timestamp: number) => {
+    if (videoEl.value) {
+      videoEl.value.currentTime = Math.max(0, Math.min(timestamp, duration.value))
+      currentTime.value = videoEl.value.currentTime
+      resetHideTimer()
+    }
+  },
 })
 
 // Mobile seek: horizontal swipe to fast-forward/rewind
@@ -195,6 +279,8 @@ let isDragging = false
 let seekTouchStartY = 0
 
 const handleTouchStart = (e: TouchEvent) => {
+  // Don't interfere with native range input (progress bar) touch handling
+  if ((e.target as HTMLElement)?.closest('.progress-bar-wrap')) return
   seekStartX = e.touches[0].clientX
   seekStartTime = videoEl.value?.currentTime ?? 0
   isDragging = false
@@ -202,6 +288,8 @@ const handleTouchStart = (e: TouchEvent) => {
 }
 
 const handleTouchMove = (e: TouchEvent) => {
+  // Don't interfere with native range input (progress bar) touch handling
+  if ((e.target as HTMLElement)?.closest('.progress-bar-wrap')) return
   if (!duration.value) return
   const dx = e.touches[0].clientX - seekStartX
   const dy = e.touches[0].clientY - seekTouchStartY
@@ -271,8 +359,15 @@ onMounted(() => {
       duration.value = video.duration
       volume.value = video.volume
     })
+    // Fallback: durationchange fires even if loadedmetadata was missed
+    video.addEventListener('durationchange', () => {
+      if (video.duration && !duration.value) {
+        duration.value = video.duration
+      }
+    })
     video.addEventListener('timeupdate', () => {
       currentTime.value = video.currentTime
+      emit('timeupdate')
       // Valid play tracking: report once when threshold reached
       if (!viewReported.value && props.playToken && currentTime.value >= viewThreshold.value) {
         viewReported.value = true
@@ -301,6 +396,11 @@ onMounted(() => {
       }
     })
     // Also hide skeleton when poster loads (covers video first frame)
+    video.addEventListener('progress', () => {
+      if (video.buffered.length > 0) {
+        buffered.value = video.buffered.end(video.buffered.length - 1)
+      }
+    })
     video.addEventListener('loadeddata', () => {
       showSkeleton.value = false
     })
@@ -315,6 +415,8 @@ onUnmounted(() => {
   if (hideControlsTimer) clearTimeout(hideControlsTimer)
   if (indicatorTimer) clearTimeout(indicatorTimer)
   if (clickTimer) clearTimeout(clickTimer)
+  if (leftTapTimer) clearTimeout(leftTapTimer)
+  if (rightTapTimer) clearTimeout(rightTapTimer)
 })
 </script>
 
@@ -345,14 +447,34 @@ onUnmounted(() => {
     <img v-if="showPoster && poster" :src="poster" class="poster-img" alt="cover" />
     <div v-if="showPoster && !poster" class="poster-placeholder"></div>
 
-    <!-- Center tap zone for play/pause — does not block swipe gestures -->
-    <div class="tap-zone" @click.stop="handleClick" />
+    <!-- Tap zones: left/center/right -->
+    <div class="tap-zones">
+      <div class="tap-zone-left" @click.stop="handleSeekTap('left')" />
+      <div class="tap-zone-center">
+        <div class="tap-zone-center-inner" @click.stop="handleClick" />
+      </div>
+      <div class="tap-zone-right" @click.stop="handleSeekTap('right')" />
+    </div>
 
+    <!-- Swipe seek indicator (center overlay) -->
     <transition name="fade">
       <div v-if="showSeekIndicator" class="play-indicator">
         <div class="play-icon-inner seek-indicator-text">
           {{ seekIndicatorText }}
         </div>
+      </div>
+    </transition>
+
+    <!-- Double-tap seek indicator (left/right side) -->
+    <transition name="tap-seek">
+      <div v-if="showTapSeekIndicator" class="tap-seek-indicator" :class="tapSeekDirection">
+        <div class="tap-seek-circle">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <path v-if="tapSeekDirection === 'left'" d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/>
+            <path v-else d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/>
+          </svg>
+        </div>
+        <div class="tap-seek-label">{{ tapSeekDelta > 0 ? '+' : '' }}{{ tapSeekDelta }}s</div>
       </div>
     </transition>
 
@@ -388,21 +510,34 @@ onUnmounted(() => {
             </svg>
           </button>
 
-          <div class="progress-bar-wrap">
-            <div
-              class="progress-bar-fill"
-              :style="{ width: duration ? (currentTime / duration * 100) + '%' : '0%' }"
-            />
-            <input
-              type="range"
-              :min="0"
-              :max="duration || 0"
-              :value="currentTime"
-              step="0.1"
-              class="progress-bar"
-              @click.stop
-              @input="seekTo"
-            />
+          <!-- 进度条区域（含时间标签） -->
+          <div class="progress-area">
+            <span class="time-label time-current">{{ formatTime(currentTime) }}</span>
+            <div class="progress-bar-wrap">
+              <div class="progress-track" />
+              <div class="progress-buffered" :style="{ width: bufferedPercent + '%' }" />
+              <div class="progress-fill" :style="{ width: progressPercent + '%' }" />
+              <div class="progress-thumb" :style="{ left: progressPercent + '%' }" />
+              <div v-if="noteTimestamps?.length && duration" class="note-markers">
+                <div
+                  v-for="(ts, i) in noteTimestamps"
+                  :key="i"
+                  class="note-marker"
+                  :style="{ left: (ts / duration * 100) + '%' }"
+                />
+              </div>
+              <input
+                type="range"
+                :min="0"
+                :max="duration || 0"
+                :value="currentTime"
+                step="0.1"
+                class="progress-input"
+                @click.stop
+                @input="seekTo"
+              />
+            </div>
+            <span class="time-label time-duration">{{ formatTime(duration) }}</span>
           </div>
 
           <div class="volume-control" @click.stop>
@@ -502,15 +637,84 @@ onUnmounted(() => {
   background: #1a1a1a;
 }
 
-.tap-zone {
+// Tap zones: left / center / right
+.tap-zones {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 48px; // leave room for controls bar below
+  display: flex;
   z-index: 5;
-  cursor: pointer;
-  /* Center region only — top/bottom 30% reserved for controls and swipe */
-  clip-path: inset(25% 20%);
 }
 
+.tap-zone-left,
+.tap-zone-right,
+.tap-zone-center {
+  height: 100%;
+  cursor: pointer;
+}
+
+.tap-zone-left {
+  flex: 0 0 35%;
+}
+
+.tap-zone-center {
+  flex: 0 0 30%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tap-zone-center-inner {
+  width: 100%;
+  height: 55%;
+}
+
+.tap-zone-right {
+  flex: 0 0 35%;
+}
+
+// Double-tap seek indicator (YouTube-style)
+.tap-seek-indicator {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 6;
+
+  &.left {
+    left: 12.5%;
+  }
+
+  &.right {
+    right: 12.5%;
+  }
+}
+
+.tap-seek-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.tap-seek-label {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+// Play/pause indicator overlay
 .play-indicator {
   position: absolute;
   inset: 0;
@@ -575,51 +779,182 @@ onUnmounted(() => {
   }
 }
 
+// ── Progress area (time labels + bar) ──
+.progress-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.time-label {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 34px;
+  text-align: center;
+  user-select: none;
+  pointer-events: none;
+  letter-spacing: 0.3px;
+}
+
 // Progress bar
 .progress-bar-wrap {
   flex: 1;
-  height: 4px;
+  height: 16px;
   position: relative;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+
+  // Invisible extended hit area for mobile
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -12px;
+    bottom: -12px;
+    z-index: 0;
+  }
+
+  &:hover .progress-thumb {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  &:hover .progress-track,
+  &:hover .progress-buffered,
+  &:hover .progress-fill {
+    height: 4px;
+    border-radius: 2px;
+  }
 }
 
-.progress-bar-fill {
+.progress-track {
   position: absolute;
   left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  z-index: 1;
+  transition: height 0.15s ease;
+}
+
+.progress-buffered {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+  z-index: 2;
+  transition: height 0.15s ease, width 0.3s ease;
+}
+
+.progress-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--accent, #1db954), #1ed760);
+  pointer-events: none;
+  z-index: 3;
+  transition: height 0.15s ease, width 0.1s linear;
+  box-shadow: 0 0 6px rgba(29, 185, 84, 0.4);
+}
+
+.progress-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 4;
+  transition: transform 0.12s ease, opacity 0.12s ease, left 0.1s linear;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5), 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
+.note-markers {
+  position: absolute;
   top: 0;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 2px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   pointer-events: none;
   z-index: 1;
 }
 
-.progress-bar {
+.note-marker {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 215, 0, 0.9);
+  box-shadow: 0 0 3px rgba(255, 215, 0, 0.5);
+  transition: transform 0.15s ease;
+}
+
+// Native range input — invisible, sits on top for interaction
+.progress-input {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 100%;
-  height: 100%;
+  height: 16px;
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
   margin: 0;
   cursor: pointer;
   outline: none;
+  z-index: 5;
 
   &::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: #fff;
+    background: transparent;
     cursor: pointer;
-    position: relative;
-    z-index: 2;
+    opacity: 0;
+  }
+
+  &::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    border: none;
+    opacity: 0;
   }
 
   &::-webkit-slider-runnable-track {
     background: transparent;
-    height: 4px;
+    height: 16px;
+  }
+
+  &::-moz-range-track {
+    background: transparent;
+    height: 16px;
   }
 }
 
@@ -688,5 +1023,21 @@ onUnmounted(() => {
 .controls-fade-enter-from,
 .controls-fade-leave-to {
   opacity: 0;
+}
+
+// Tap seek indicator animation (scale + fade)
+.tap-seek-enter-active {
+  transition: opacity 0.15s, transform 0.15s;
+}
+.tap-seek-leave-active {
+  transition: opacity 0.4s, transform 0.4s;
+}
+.tap-seek-enter-from {
+  opacity: 0;
+  transform: translateY(-50%) scale(0.7);
+}
+.tap-seek-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) scale(1.15);
 }
 </style>

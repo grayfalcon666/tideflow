@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import type { VideoItem } from '../../types'
+import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
   item: VideoItem
@@ -15,10 +16,18 @@ const goToTag = (tag: string) => {
 const goToVideo = () => {
   router.push(`/video/${props.item.video_id}`)
 }
+
+const goToUser = () => {
+  router.push(`/u/${props.item.author?.id}`)
+}
 </script>
 
 <template>
   <div class="slide-info-bar">
+    <div class="author-name-row" @click.stop="goToUser">
+      <span class="author-name">{{ item.author?.username ?? item.username }}</span>
+      <TFIcon v-if="item.author?.is_big_v" name="verified" :size="14" color="orange" />
+    </div>
     <h3 class="video-title" @click="goToVideo">{{ item.title }}</h3>
     <p v-if="item.description" class="video-desc">{{ item.description }}</p>
     <div v-if="item.tags && item.tags.length" class="video-tags">
@@ -38,6 +47,21 @@ const goToVideo = () => {
   flex-direction: column;
   gap: var(--space-2);
   padding: 0 var(--space-4);
+}
+
+.author-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  margin-bottom: var(--space-2);
+}
+
+.author-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-base);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .video-title {

@@ -32,7 +32,7 @@ onMounted(() => {
     <div class="page-header">
       <h2>私信</h2>
       <div class="header-actions">
-        <TFIcon name="notifications" :size="22" @click="router.push('/notifications')" class="action-icon" />
+        <TFIcon name="notifications" :size="35" @click="router.push('/notifications')" class="action-icon" />
       </div>
     </div>
 
