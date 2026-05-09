@@ -43,9 +43,18 @@ export const useInteractionStore = defineStore('interaction', () => {
     userIds.forEach(id => followingUserIds.value.add(id))
   }
 
+  const removeLike = (videoId: number) => {
+    likedVideoIds.value.delete(videoId)
+  }
+
+  const replaceLikes = (ids: number[]) => {
+    likedVideoIds.value = new Set(ids)
+  }
+
   return {
     likedVideoIds, followingUserIds,
     isLiked, isFollowing, toggleLike, toggleFollow, reset, syncLike, syncFollow, syncAll,
+    removeLike, replaceLikes,
   }
 }, {
   persist: {

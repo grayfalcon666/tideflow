@@ -22,6 +22,12 @@ export const getMyLiked = (cursor?: string, limit = 10) =>
     { params: { cursor, limit } }
   )
 
+export const getUserLikedVideos = (userId: number, cursor?: string, limit = 10) =>
+  api.get<ApiResponse<{ items: VideoItem[] & { id: number }[]; next_cursor: string | null; has_more: boolean }>>(
+    `/users/${userId}/liked-videos`,
+    { params: { cursor, limit } }
+  )
+
 export const uploadVideo = (formData: FormData) =>
   api.post<ApiResponse<{ play_url: string }>>('/videos/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -45,6 +51,17 @@ export const publishVideo = (data: {
   tags?: string[]
 }) =>
   api.post<ApiResponse<{ video_id: number }>>('/videos', data)
+
+export const updateVideo = (id: number, data: {
+  title?: string
+  description?: string
+  cover_url?: string
+  tags?: string[]
+}) =>
+  api.put<ApiResponse<null>>(`/videos/${id}`, data)
+
+export const deleteVideo = (id: number) =>
+  api.delete<ApiResponse<null>>(`/videos/${id}`)
 
 export const recordView = (playToken: string) =>
   api.post<ApiResponse<{ user_id: number; client_ip: string; video_id: number }>>('/metrics/view', {

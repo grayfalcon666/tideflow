@@ -13,5 +13,14 @@ export const getMessages = (peerId: number, cursor?: string, limit = 20) =>
 export const sendMessage = (toId: number, content: string) =>
   api.post<ApiResponse<Message>>('/messages', { to_id: toId, content })
 
+export const shareVideo = (toIds: number[], videoId: number, title: string, coverUrl: string, authorName: string) =>
+  api.post<ApiResponse<{ messages: Message[] }>>('/messages/share-video', {
+    to_ids: toIds,
+    video_id: videoId,
+    title,
+    cover_url: coverUrl,
+    author_name: authorName,
+  })
+
 export const markRead = (peerId: number) =>
   api.put<ApiResponse<void>>(`/messages/conversations/${peerId}/read`)

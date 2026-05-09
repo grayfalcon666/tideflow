@@ -39,11 +39,13 @@ export interface UserInfo {
   following_count: number
   video_count: number
   is_big_v: boolean
+  likes_public?: boolean
   created_at: number
 }
 
 export interface UserProfile extends UserInfo {
   is_following: boolean
+  is_following_me: boolean
   is_me: boolean
 }
 
@@ -201,8 +203,16 @@ export interface Message {
   from_id: number
   to_id: number
   content: string
+  msg_type: string
   created_at: number
   is_read: boolean
+}
+
+export interface VideoSharePayload {
+  video_id: number
+  title: string
+  cover_url: string
+  author_name: string
 }
 
 // ============ Tag ============
@@ -224,4 +234,47 @@ export interface SSENotification {
   target_id: number
   content: string
   occurred_at: number
+}
+
+// ============ Note ============
+export interface RawNote {
+  id: number
+  video_id: number
+  author_id: number
+  username: string
+  timestamp: number
+  content: string
+  created_at: string
+}
+
+export interface Note {
+  note_id: number
+  video_id: number
+  author_id: number
+  username: string
+  timestamp: number
+  content: string
+  created_at: number
+  is_mine: boolean
+  formatted_time: string
+}
+
+export function formatTimestamp(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
+export function normalizeNote(raw: RawNote, currentUserId?: number): Note {
+  return {
+    note_id: raw.id,
+    video_id: raw.video_id,
+    author_id: raw.author_id,
+    username: raw.username,
+    timestamp: raw.timestamp,
+    content: raw.content,
+    created_at: new Date(raw.created_at).getTime() / 1000,
+    is_mine: currentUserId != null ? raw.author_id === currentUserId : false,
+    formatted_time: formatTimestamp(raw.timestamp),
+  }
 }

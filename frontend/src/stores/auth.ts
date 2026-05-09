@@ -8,6 +8,7 @@ import * as videoService from '../services/video'
 import { useInteractionStore } from './interaction'
 import { useNotificationStore } from './notification'
 import { useMessageStore } from './message'
+import { useSettingsStore } from './settings'
 
 export const useAuthStore = defineStore('auth', () => {
   const accountId = ref<number | null>(null)
@@ -72,11 +73,14 @@ export const useAuthStore = defineStore('auth', () => {
     followerCount.value = 0
     initialized.value = false
     localStorage.removeItem('tideflow_refresh_token')
+    localStorage.removeItem('tideflow-settings')
+    localStorage.removeItem('tideflow-interaction')
 
     // 清空其他 store
     useInteractionStore().reset()
     useNotificationStore().reset()
     useMessageStore().reset()
+    useSettingsStore().reset()
 
     if (router) router.push('/account')
   }

@@ -8,6 +8,7 @@ const normalizeMessage = (m: any): Message => ({
   from_id: m.from_id,
   to_id: m.to_id,
   content: m.content,
+  msg_type: m.msg_type ?? 'text',
   created_at: typeof m.created_at === 'string' ? new Date(m.created_at).getTime() / 1000 : m.created_at,
   is_read: m.is_read,
 })
@@ -16,7 +17,7 @@ const normalizeConversation = (c: any): Conversation => ({
   peer_id: c.user?.id ?? c.peer_id,
   peer_username: c.user?.username ?? c.peer_username ?? '',
   peer_avatar: c.user?.avatar_url ?? c.peer_avatar ?? '',
-  last_message: c.last_message ? normalizeMessage(c.last_message) : { id: 0, from_id: 0, to_id: 0, content: '', created_at: 0, is_read: false },
+  last_message: c.last_message ? normalizeMessage(c.last_message) : { id: 0, from_id: 0, to_id: 0, content: '', msg_type: 'text', created_at: 0, is_read: false },
   unread_count: c.unread_count ?? 0,
 })
 
