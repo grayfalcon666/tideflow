@@ -173,7 +173,19 @@ func (s *VideoService) UpdateVideo(ctx context.Context, id uint, authorID uint, 
 		return errors.New("forbidden")
 	}
 	updates["update_time"] = time.Now()
-	return s.repo.UpdateVideo(ctx, id, updates)
+	if err := s.repo.UpdateVideo(ctx, id, updates); err != nil {
+		return err
+	}
+	// 写入 outbox_msgs，触发 ES 搜索索引更新
+	outbox := &models.OutboxMsg{
+		VideoID:    id,
+		AuthorID:   video.AuthorID,
+		EventType:  "video_upsert",
+		CreateTime: time.Now(),
+		Status:     "pending",
+	}
+	s.repo.CreateOutboxMsg(ctx, outbox)
+	return nil
 }
 
 func (s *VideoService) DeleteVideo(ctx context.Context, id uint, authorID uint) error {
@@ -228,6 +240,16 @@ func (s *VideoService) DeleteVideo(ctx context.Context, id uint, authorID uint) 
 	if err := s.repo.SoftDeleteVideo(ctx, id); err != nil {
 		return err
 	}
+
+	// 写入 outbox_msgs，触发 ES 搜索索引删除
+	outbox := &models.OutboxMsg{
+		VideoID:    id,
+		AuthorID:   authorID,
+		EventType:  "video_delete",
+		CreateTime: time.Now(),
+		Status:     "pending",
+	}
+	s.repo.CreateOutboxMsg(ctx, outbox)
 
 	// 删除后清理 L1/L2 缓存，防止已删除视频被拉取
 	s.cache.InvalidateVideoDetail(id)
@@ -358,6 +380,8 @@ func (s *VideoService) InitChunkedUpload(ctx context.Context, filename string, f
 	if err := rdb.Set(ctx, key, data, uploadSessionTTL).Err(); err != nil {
 		return "", err
 	}
+	// Initialize empty chunk set for atomic SADD tracking.
+	rdb.Expire(ctx, infraredis.UploadChunks(uploadID), uploadSessionTTL)
 
 	return uploadID, nil
 }
@@ -385,21 +409,13 @@ func (s *VideoService) UploadChunk(ctx context.Context, uploadID string, chunkIn
 		return err
 	}
 
-	// Idempotent: avoid duplicate entries.
-	found := false
-	for _, idx := range session.UploadedChunks {
-		if idx == chunkIndex {
-			found = true
-			break
-		}
-	}
-	if !found {
-		session.UploadedChunks = append(session.UploadedChunks, chunkIndex)
-	}
-
-	data, _ := json.Marshal(session)
+	// Use SADD for atomic add — avoids read-modify-write race with concurrent chunks.
 	rdb := s.cache.GetRedis()
-	rdb.Set(ctx, infraredis.UploadSession(uploadID), data, uploadSessionTTL)
+	chunksKey := infraredis.UploadChunks(uploadID)
+	if err := rdb.SAdd(ctx, chunksKey, chunkIndex).Err(); err != nil {
+		return err
+	}
+	rdb.Expire(ctx, chunksKey, uploadSessionTTL)
 
 	return nil
 }
@@ -416,12 +432,16 @@ func (s *VideoService) CompleteChunkedUpload(ctx context.Context, uploadID strin
 		return "", nil, fmt.Errorf("invalid upload session: %w", err)
 	}
 
-	if len(session.UploadedChunks) != session.TotalChunks {
-		missing := session.TotalChunks - len(session.UploadedChunks)
+	chunksDir := filepath.Join(s.UploadDir, "chunks", uploadID)
+
+	// Check actual uploaded chunk count from Redis Set for atomic accuracy.
+	chunksKey := infraredis.UploadChunks(uploadID)
+	rdb := s.cache.GetRedis()
+	uploadedCount, _ := rdb.SCard(ctx, chunksKey).Result()
+	if int(uploadedCount) != session.TotalChunks {
+		missing := session.TotalChunks - int(uploadedCount)
 		return "", nil, fmt.Errorf("missing %d chunks", missing)
 	}
-
-	chunksDir := filepath.Join(s.UploadDir, "chunks", uploadID)
 
 	finalFilename := generateFilename(session.Filename)
 	finalPath := filepath.Join(s.UploadDir, "videos", finalFilename)
@@ -454,8 +474,8 @@ func (s *VideoService) CompleteChunkedUpload(ctx context.Context, uploadID strin
 	}
 
 	os.RemoveAll(chunksDir)
-	rdb := s.cache.GetRedis()
 	rdb.Del(ctx, infraredis.UploadSession(uploadID))
+	rdb.Del(ctx, infraredis.UploadChunks(uploadID))
 
 	return "/videos/" + filepath.Base(finalFilename), meta, nil
 }

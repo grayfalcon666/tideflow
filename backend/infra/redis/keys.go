@@ -22,6 +22,7 @@ const (
 	KeyViewCount      = "count:views:%d"
 	KeyDirtyVideos     = "dirty:videos"
 	KeyUploadSession   = "upload:%s"
+	KeyUploadChunks    = "upload:chunks:%s"
 )
 
 func AccountToken(uid uint) string {
@@ -90,4 +91,8 @@ func DirtyVideos() string {
 
 func UploadSession(uploadID string) string {
 	return fmt.Sprintf("%s:"+KeyUploadSession, Version, uploadID)
+}
+
+func UploadChunks(uploadID string) string {
+	return fmt.Sprintf("%s:"+KeyUploadChunks, Version, uploadID)
 }
