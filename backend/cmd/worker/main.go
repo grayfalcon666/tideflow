@@ -16,6 +16,8 @@ import (
 	"tideflow/internal/config"
 	"tideflow/internal/mq"
 	"tideflow/internal/repository"
+
+	infraes "tideflow/infra/es"
 )
 
 func main() {
@@ -85,6 +87,24 @@ func main() {
 		nw := mq.NewNotificationWorker(mqInstance, hub, repo)
 		nw.Start(ctx)
 	}()
+
+	// ES 搜索索引同步 Worker（监听 search.events）
+	if len(cfg.Elasticsearch.Addresses) > 0 {
+		esClient, err := infraes.NewClient(&cfg.Elasticsearch)
+		if err != nil {
+			log.Printf("failed to connect to ES, search worker disabled: %v", err)
+		} else {
+			if err := esClient.EnsureIndex(context.Background()); err != nil {
+				log.Printf("failed to ensure ES index: %v", err)
+			} else {
+				log.Println("ES search worker connected and index ready")
+				go func() {
+					sw := mq.NewSearchWorker(mqInstance, repo, esClient)
+					sw.Start(ctx)
+				}()
+			}
+		}
+	}
 
 	// 播放量定时落库：每 5 分钟将 Redis 中的计数合并到 MySQL
 	c := cron.New()

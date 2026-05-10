@@ -10,6 +10,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	goredis "github.com/redis/go-redis/v9"
 
+	"tideflow/infra/es"
 	"tideflow/infra/redis"
 	"tideflow/internal/models"
 	"tideflow/internal/repository"
@@ -643,25 +644,174 @@ func (w *OutboxWorker) processOutbox(ctx context.Context) {
 	}
 	for _, m := range msgs {
 		if m.AuthorID == 0 || m.VideoID == 0 {
-			// 防御：跳过字段不完整的旧遗留记录，直接标记为 processed
 			w.repo.UpdateOutboxMsgStatus(ctx, m.ID, "processed")
 			continue
 		}
-		event := VideoPublishEvent{
-			EventID:    fmt.Sprintf("%d", m.ID),
-			VideoID:    m.VideoID,
-			AuthorID:   m.AuthorID,
-			CreateTime: m.CreateTime.UnixMilli(),
-			OccurredAt: time.Now().UnixMilli(),
+
+		switch m.EventType {
+		case "video_publish":
+			// 同时写 timeline 和 ES 搜索索引
+			event := VideoPublishEvent{
+				EventID:    fmt.Sprintf("%d", m.ID),
+				VideoID:    m.VideoID,
+				AuthorID:   m.AuthorID,
+				CreateTime: m.CreateTime.UnixMilli(),
+				OccurredAt: time.Now().UnixMilli(),
+			}
+			if err := w.mq.Publish(ctx, "video.events", "video.publish", event); err != nil {
+				log.Printf("failed to publish video.publish event for msg %d: %v", m.ID, err)
+			}
+			syncEvent := VideoUpsertDeleteEvent{
+				EventID:   fmt.Sprintf("%d", m.ID),
+				VideoID:   m.VideoID,
+				AuthorID:  m.AuthorID,
+				OccurredAt: time.Now().UnixMilli(),
+			}
+			if err := w.mq.Publish(ctx, "search.events", "search.sync", syncEvent); err != nil {
+				log.Printf("failed to publish search.sync event for msg %d: %v", m.ID, err)
+			}
+		case "video_upsert", "video_delete":
+			event := VideoUpsertDeleteEvent{
+				EventID:    fmt.Sprintf("%d", m.ID),
+				VideoID:    m.VideoID,
+				AuthorID:   m.AuthorID,
+				OccurredAt: time.Now().UnixMilli(),
+			}
+			routingKey := "search.sync"
+			if m.EventType == "video_delete" {
+				routingKey = "search.delete"
+			}
+			if err := w.mq.Publish(ctx, "search.events", routingKey, event); err != nil {
+				log.Printf("failed to publish %s event for msg %d: %v", m.EventType, m.ID, err)
+				continue
+			}
+		default:
+			log.Printf("unknown outbox event_type: %s, skipping msg %d", m.EventType, m.ID)
 		}
-		if err := w.mq.Publish(ctx, "video.events", "video.publish", event); err != nil {
-			log.Printf("failed to publish video.publish event for msg %d: %v", m.ID, err)
-			continue
-		}
+
 		if err := w.repo.UpdateOutboxMsgStatus(ctx, m.ID, "processed"); err != nil {
 			log.Printf("failed to update outbox msg %d status: %v", m.ID, err)
 		}
 	}
+}
+
+type SearchWorker struct {
+	mq   *MQ
+	repo *repository.Repository
+	es   *es.Client
+}
+
+func NewSearchWorker(mq *MQ, repo *repository.Repository, esClient *es.Client) *SearchWorker {
+	return &SearchWorker{mq: mq, repo: repo, es: esClient}
+}
+
+func (w *SearchWorker) Start(ctx context.Context) error {
+	go w.consumeSearchQueue(ctx, "search.sync.queue", w.handleVideoSync)
+	go w.consumeSearchQueue(ctx, "search.delete.queue", w.handleVideoDelete)
+	return nil
+}
+
+func (w *SearchWorker) consumeSearchQueue(ctx context.Context, queue string, handler func(context.Context, amqp.Delivery)) {
+	log.Printf("[search_worker] consuming queue: %s", queue)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		msgs, err := w.mq.Consume(queue)
+		if err != nil {
+			log.Printf("failed to consume %s, reopening channel: %v", queue, err)
+			ch, err := w.mq.OpenChannel()
+			if err != nil {
+				log.Printf("failed to open new channel: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			if err := w.mq.ReconnectWithChannel(ch); err != nil {
+				log.Printf("failed to reconnect: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			continue
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case d, more := <-msgs:
+				if !more {
+					log.Printf("%s channel closed, reopening", queue)
+					break
+				}
+				log.Printf("[search_worker] received message on queue=%s body=%s", queue, string(d.Body))
+				handler(ctx, d)
+			}
+		}
+	}
+}
+
+func (w *SearchWorker) handleVideoSync(ctx context.Context, d amqp.Delivery) {
+	e, err := ParseVideoUpsertDeleteEvent(d)
+	if err != nil {
+		log.Printf("failed to parse video sync event: %v", err)
+		d.Nack(false, false)
+		return
+	}
+
+	// 查询 MySQL 获取最新视频信息
+	video, err := w.repo.GetVideoByID(ctx, e.VideoID)
+	if err != nil {
+		log.Printf("failed to get video %d from DB: %v", e.VideoID, err)
+		d.Ack(false) // 视频不存在，静默跳过
+		return
+	}
+
+	// 软删除的视频不索引
+	if video.DeletedAt.Valid {
+		d.Ack(false)
+		return
+	}
+
+	// 查询标签
+	tags, _ := w.repo.GetVideoTags(ctx, e.VideoID)
+
+	doc := &es.VideoDoc{
+		VideoID:     video.ID,
+		Title:       video.Title,
+		Description: video.Description,
+		Username:    video.Username,
+		Tags:        tags,
+		Popularity:  video.Popularity,
+		CreateTime:  video.CreateTime.UnixMilli(),
+	}
+
+	if err := w.es.UpsertVideo(ctx, doc); err != nil {
+		log.Printf("failed to upsert video %d to ES: %v", e.VideoID, err)
+		d.Nack(false, true)
+		return
+	}
+
+	d.Ack(false)
+}
+
+func (w *SearchWorker) handleVideoDelete(ctx context.Context, d amqp.Delivery) {
+	e, err := ParseVideoUpsertDeleteEvent(d)
+	if err != nil {
+		log.Printf("failed to parse video delete event: %v", err)
+		d.Nack(false, false)
+		return
+	}
+
+	if err := w.es.DeleteVideo(ctx, e.VideoID); err != nil {
+		log.Printf("failed to delete video %d from ES: %v", e.VideoID, err)
+		d.Nack(false, true)
+		return
+	}
+
+	d.Ack(false)
 }
 
 type SSEHub struct {

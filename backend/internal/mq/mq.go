@@ -47,6 +47,7 @@ func (m *MQ) setupExchanges() error {
 		"social.events",
 		"video.popularity.events",
 		"dlx.events",
+		"search.events",
 	}
 
 	for _, name := range exchanges {
@@ -72,6 +73,8 @@ func (m *MQ) setupExchanges() error {
 		{"notification.like.queue", "like.events", "like.like"},
 		{"notification.comment.queue", "comment.events", "comment.publish"},
 		{"notification.follow.queue", "social.events", "social.follow"},
+		{"search.sync.queue", "search.events", "search.sync"},
+		{"search.delete.queue", "search.events", "search.delete"},
 	}
 
 	for _, q := range queues {
@@ -178,6 +181,13 @@ type PopularityEvent struct {
 	OccurredAt int64 `json:"occurred_at"`
 }
 
+type VideoUpsertDeleteEvent struct {
+	EventID    string `json:"event_id"`
+	VideoID    uint   `json:"video_id"`
+	AuthorID   uint   `json:"author_id"`
+	OccurredAt int64  `json:"occurred_at"`
+}
+
 func ParseVideoPublishEvent(d amqp.Delivery) (*VideoPublishEvent, error) {
 	var e VideoPublishEvent
 	if err := json.Unmarshal(d.Body, &e); err != nil {
@@ -212,6 +222,14 @@ func ParseSocialEvent(d amqp.Delivery) (*SocialEvent, error) {
 
 func ParsePopularityEvent(d amqp.Delivery) (*PopularityEvent, error) {
 	var e PopularityEvent
+	if err := json.Unmarshal(d.Body, &e); err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+func ParseVideoUpsertDeleteEvent(d amqp.Delivery) (*VideoUpsertDeleteEvent, error) {
+	var e VideoUpsertDeleteEvent
 	if err := json.Unmarshal(d.Body, &e); err != nil {
 		return nil, err
 	}
