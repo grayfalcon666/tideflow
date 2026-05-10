@@ -306,20 +306,23 @@ func (h *VideoHandler) DeleteVideo(c *gin.Context) {
 	response.Success(c, nil)
 }
 
+// RecordViewRequest 播放记录请求
+type RecordViewRequest struct {
+	PlayToken string `json:"play_token" binding:"required"`
+}
+
 // @Summary 上报播放记录
 // @Description 验证 play_token，解析 user_id/ip，半小时限流后累加播放量
 // @Tags 视频
 // @Accept json
 // @Produce json
-// @Param body body RecordViewRequest true "播放记录"
+// @Param body body handler.RecordViewRequest true "播放记录"
 // @Success 200 {object} response.Response
 // @Failure 400 {object} response.Response
 // @Failure 401 {object} response.Response
 // @Router /api/v1/metrics/view [post]
 func (h *VideoHandler) RecordView(c *gin.Context) {
-	var req struct {
-		PlayToken string `json:"play_token" binding:"required"`
-	}
+	var req RecordViewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return

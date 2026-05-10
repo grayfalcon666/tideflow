@@ -120,6 +120,8 @@ GET /feed/following?cursor&limit
 # 克隆仓库
 git clone https://github.com/your-org/tideflow.git
 
+wget https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.13.0.zip
+
 # 启动基础设施（MySQL, Redis, RabbitMQ）
 docker-compose up -d
 

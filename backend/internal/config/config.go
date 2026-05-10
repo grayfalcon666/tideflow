@@ -11,6 +11,7 @@ type Config struct {
 	DB            DBConfig
 	Redis         RedisConfig
 	RabbitMQ      RabbitMQConfig
+	Elasticsearch ElasticsearchConfig
 	JWT           JWTConfig
 	Server        ServerConfig
 	Upload        UploadConfig
@@ -30,6 +31,12 @@ type RedisConfig struct {
 
 type RabbitMQConfig struct {
 	URL string
+}
+
+type ElasticsearchConfig struct {
+	Addresses []string
+	Username  string
+	Password  string
 }
 
 type JWTConfig struct {
@@ -70,6 +77,9 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("SERVER_PORT", "8080")
 	v.SetDefault("UPLOAD_DIR", "./uploads")
 	v.SetDefault("BIG_V_THRESHOLD", 10000)
+	v.SetDefault("ES_ADDRESSES", "http://localhost:9200")
+	v.SetDefault("ES_USERNAME", "")
+	v.SetDefault("ES_PASSWORD", "")
 	v.SetDefault("LOGIN_RATE_LIMIT", 10)
 	v.SetDefault("REGISTER_RATE_LIMIT", 5)
 	v.SetDefault("LIKE_RATE_LIMIT", 30)
@@ -89,6 +99,16 @@ func Load(path string) (*Config, error) {
 	cfg.Redis.Password = v.GetString("REDIS_PASSWORD")
 	cfg.Redis.DB = v.GetInt("REDIS_DB")
 	cfg.RabbitMQ.URL = v.GetString("RABBITMQ_URL")
+
+	esAddresses := v.GetString("ES_ADDRESSES")
+	if esAddresses == "" {
+		cfg.Elasticsearch.Addresses = []string{"http://localhost:9200"}
+	} else {
+		cfg.Elasticsearch.Addresses = []string{esAddresses}
+	}
+	cfg.Elasticsearch.Username = v.GetString("ES_USERNAME")
+	cfg.Elasticsearch.Password = v.GetString("ES_PASSWORD")
+
 	cfg.JWT.Secret = v.GetString("JWT_SECRET")
 	cfg.Server.Port = v.GetString("SERVER_PORT")
 	cfg.Upload.Dir = v.GetString("UPLOAD_DIR")

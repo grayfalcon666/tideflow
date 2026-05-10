@@ -10,7 +10,7 @@ help: ## Show this help message
 
 # ==================== Infrastructure ====================
 up: ## Start all infrastructure services
-	docker compose up -d mysql redis rabbitmq
+	docker compose up -d mysql redis rabbitmq elasticsearch kibana
 
 down: ## Stop all infrastructure services
 	docker compose down
@@ -65,5 +65,22 @@ logs-api: ## Tail API logs
 
 logs-worker: ## Tail Worker logs
 	docker compose logs -f worker
+
+# ==================== Elasticsearch ====================
+es-health: ## Check ES cluster health
+	@curl -s http://localhost:9200/_cluster/health | jq .
+
+es-indices: ## List ES indices
+	@curl -s http://localhost:9200/_cat/indices?v
+
+es-recreate-index: ## Delete and recreate videos_index
+	@curl -X DELETE http://localhost:9200/videos_index 2>/dev/null; echo "deleted"
+	@curl -X PUT http://localhost:9200/videos_index -H 'Content-Type: application/json' -d '{"settings":{"number_of_shards":3,"number_of_replicas":1,"analysis":{"analyzer":{"ik_max":{"type":"ik_max_word"},"ik_smart":{"type":"ik_smart"}}},"mappings":{"properties":{"video_id":{"type":"long"},"title":{"type":"text","analyzer":"ik_max","search_analyzer":"ik_smart"},"description":{"type":"text","analyzer":"ik_max","search_analyzer":"ik_smart"},"username":{"type":"text","analyzer":"ik_max","search_analyzer":"ik_smart"},"tags":{"type":"keyword"},"popularity":{"type":"long"},"create_time":{"type":"date","format":"strict_date_optional_time||epoch_millis"}}}}}' | jq .
+
+es-refresh: ## Refresh videos_index
+	@curl -X POST http://localhost:9200/videos_index/_refresh | jq .
+
+es-stats: ## Get ES nodes stats
+	@curl -s http://localhost:9200/_nodes/stats | jq .
 
 .DEFAULT_GOAL := help

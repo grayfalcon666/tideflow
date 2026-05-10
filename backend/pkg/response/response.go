@@ -70,6 +70,15 @@ type PageResponse struct {
 	HasMore    bool        `json:"has_more"`
 }
 
+type SearchResponse struct {
+	Items      interface{} `json:"items"`
+	Total      int64       `json:"total"`
+	Page       int         `json:"page"`
+	Size       int         `json:"size"`
+	HasMore    bool        `json:"has_more"`
+	NextCursor *string     `json:"next_cursor,omitempty"`
+}
+
 type TokenResponse struct {
 	AccountID    uint   `json:"account_id"`
 	AccessToken  string `json:"access_token"`

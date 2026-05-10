@@ -36,7 +36,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.LoginRequest"
+                            "$ref": "#/definitions/internal_handler.LoginRequest"
                         }
                     }
                 ],
@@ -44,19 +44,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.TokenResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.TokenResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -81,13 +81,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -126,19 +126,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.OAuth2TokenResponse"
+                            "$ref": "#/definitions/internal_handler.OAuth2TokenResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -164,7 +164,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.ChangePasswordRequest"
+                            "$ref": "#/definitions/internal_handler.ChangePasswordRequest"
                         }
                     }
                 ],
@@ -172,19 +172,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -210,7 +210,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.RefreshRequest"
+                            "$ref": "#/definitions/internal_handler.RefreshRequest"
                         }
                     }
                 ],
@@ -218,13 +218,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.TokenResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.TokenResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -250,7 +250,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.RegisterRequest"
+                            "$ref": "#/definitions/internal_handler.RegisterRequest"
                         }
                     }
                 ],
@@ -258,19 +258,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.TokenResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.TokenResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -310,13 +310,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -351,7 +351,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     }
                 }
@@ -394,7 +394,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     }
                 }
@@ -436,13 +436,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -482,13 +482,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -519,7 +519,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.SendMessageRequest"
+                            "$ref": "#/definitions/internal_handler.SendMessageRequest"
                         }
                     }
                 ],
@@ -527,19 +527,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -564,13 +564,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -617,19 +617,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -663,19 +663,116 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/messages/share-video": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "将视频预览消息批量发送给指定好友",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "私信"
+                ],
+                "summary": "分享视频给好友",
+                "parameters": [
+                    {
+                        "description": "视频分享请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metrics/view": {
+            "post": {
+                "description": "验证 play_token，解析 user_id/ip，半小时限流后累加播放量",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "上报播放记录",
+                "parameters": [
+                    {
+                        "description": "播放记录",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.RecordViewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -715,13 +812,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -751,7 +848,7 @@ const docTemplate = `{
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/handler.MarkReadRequest"
+                            "$ref": "#/definitions/internal_handler.MarkReadRequest"
                         }
                     }
                 ],
@@ -759,13 +856,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -805,7 +902,7 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -830,13 +927,79 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/search/videos": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "通过关键词搜索视频，支持按热度或时间排序",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "搜索"
+                ],
+                "summary": "搜索视频",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "搜索关键词",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序字段：popularity（默认）/ create_time",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序方向：desc（默认）/ asc",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.SearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -856,7 +1019,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -881,13 +1044,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -916,7 +1079,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.UpdateProfileRequest"
+                            "$ref": "#/definitions/internal_handler.UpdateProfileRequest"
                         }
                     }
                 ],
@@ -924,19 +1087,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -967,7 +1130,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.UpdateUsernameRequest"
+                            "$ref": "#/definitions/internal_handler.UpdateUsernameRequest"
                         }
                     }
                 ],
@@ -975,25 +1138,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1022,13 +1185,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1057,13 +1220,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1110,19 +1273,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1169,19 +1332,67 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{id}/liked-videos": {
+            "get": {
+                "description": "获取指定用户点赞过的视频列表，若用户设置隐私则仅自己可见",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动"
+                ],
+                "summary": "查看用户点赞过的视频",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1215,19 +1426,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1274,19 +1485,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1320,19 +1531,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1364,19 +1575,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1407,7 +1618,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PublishVideoRequest"
+                            "$ref": "#/definitions/internal_handler.PublishVideoRequest"
                         }
                     }
                 ],
@@ -1415,19 +1626,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1464,19 +1675,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1513,19 +1724,206 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/videos/upload/chunk": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "上传视频的一个分片",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "上传分片",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "上传会话ID",
+                        "name": "upload_id",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分片序号",
+                        "name": "chunk_index",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "分片文件",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/videos/upload/complete": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "合并所有分片，返回视频播放URL和元信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "完成切片上传",
+                "parameters": [
+                    {
+                        "description": "{upload_id}",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/videos/upload/init": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "创建切片上传会话，返回 upload_id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "初始化切片上传",
+                "parameters": [
+                    {
+                        "description": "上传参数 {filename, file_size, chunk_size}",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/videos/upload/status/{upload_id}": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "查询切片上传会话的当前状态（用于断点续传）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "查询上传进度",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "上传会话ID",
+                        "name": "upload_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1554,19 +1952,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1602,7 +2000,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.UpdateVideoRequest"
+                            "$ref": "#/definitions/internal_handler.UpdateVideoRequest"
                         }
                     }
                 ],
@@ -1610,25 +2008,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1660,25 +2058,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1726,13 +2124,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.PageResponse"
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1768,7 +2166,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.PublishCommentRequest"
+                            "$ref": "#/definitions/internal_handler.PublishCommentRequest"
                         }
                     }
                 ],
@@ -1776,19 +2174,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1829,19 +2227,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1875,19 +2273,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1919,19 +2317,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1963,19 +2361,182 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Response"
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/videos/{id}/notes": {
+            "get": {
+                "description": "获取视频的时间轴笔记列表，按时间戳升序排列",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "笔记"
+                ],
+                "summary": "获取视频笔记列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "视频ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "游标（时间戳）",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "在视频指定时间点创建笔记",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "笔记"
+                ],
+                "summary": "创建视频笔记",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "视频ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "笔记内容",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.CreateNoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/videos/{id}/notes/{note_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "删除指定笔记，仅笔记作者可删除",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "笔记"
+                ],
+                "summary": "删除笔记",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "视频ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "笔记ID",
+                        "name": "note_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
                     }
                 }
@@ -1983,7 +2544,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "handler.ChangePasswordRequest": {
+        "internal_handler.ChangePasswordRequest": {
             "type": "object",
             "required": [
                 "new_password",
@@ -2004,7 +2565,22 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.LoginRequest": {
+        "internal_handler.CreateNoteRequest": {
+            "type": "object",
+            "required": [
+                "content",
+                "timestamp"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_handler.LoginRequest": {
             "type": "object",
             "required": [
                 "password",
@@ -2019,7 +2595,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.MarkReadRequest": {
+        "internal_handler.MarkReadRequest": {
             "type": "object",
             "properties": {
                 "ids": {
@@ -2030,7 +2606,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.OAuth2TokenResponse": {
+        "internal_handler.OAuth2TokenResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -2044,7 +2620,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.PublishCommentRequest": {
+        "internal_handler.PublishCommentRequest": {
             "type": "object",
             "required": [
                 "content"
@@ -2061,7 +2637,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.PublishVideoRequest": {
+        "internal_handler.PublishVideoRequest": {
             "type": "object",
             "required": [
                 "cover_url",
@@ -2089,7 +2665,18 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.RefreshRequest": {
+        "internal_handler.RecordViewRequest": {
+            "type": "object",
+            "required": [
+                "play_token"
+            ],
+            "properties": {
+                "play_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.RefreshRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -2100,7 +2687,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.RegisterRequest": {
+        "internal_handler.RegisterRequest": {
             "type": "object",
             "required": [
                 "password",
@@ -2119,7 +2706,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.SendMessageRequest": {
+        "internal_handler.SendMessageRequest": {
             "type": "object",
             "required": [
                 "content",
@@ -2134,7 +2721,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.UpdateProfileRequest": {
+        "internal_handler.UpdateProfileRequest": {
             "type": "object",
             "properties": {
                 "avatar_url": {
@@ -2145,7 +2732,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.UpdateUsernameRequest": {
+        "internal_handler.UpdateUsernameRequest": {
             "type": "object",
             "required": [
                 "username"
@@ -2158,7 +2745,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.UpdateVideoRequest": {
+        "internal_handler.UpdateVideoRequest": {
             "type": "object",
             "properties": {
                 "cover_url": {
@@ -2178,7 +2765,7 @@ const docTemplate = `{
                 }
             }
         },
-        "response.PageResponse": {
+        "tideflow_pkg_response.PageResponse": {
             "type": "object",
             "properties": {
                 "has_more": {
@@ -2190,7 +2777,7 @@ const docTemplate = `{
                 }
             }
         },
-        "response.Response": {
+        "tideflow_pkg_response.Response": {
             "type": "object",
             "properties": {
                 "code": {
@@ -2202,7 +2789,28 @@ const docTemplate = `{
                 }
             }
         },
-        "response.TokenResponse": {
+        "tideflow_pkg_response.SearchResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {},
+                "next_cursor": {
+                    "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tideflow_pkg_response.TokenResponse": {
             "type": "object",
             "properties": {
                 "access_token": {

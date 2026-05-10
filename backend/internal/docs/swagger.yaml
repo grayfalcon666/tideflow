@@ -1,5 +1,5 @@
 definitions:
-  handler.ChangePasswordRequest:
+  internal_handler.ChangePasswordRequest:
     properties:
       new_password:
         maxLength: 128
@@ -14,7 +14,17 @@ definitions:
     - old_password
     - username
     type: object
-  handler.LoginRequest:
+  internal_handler.CreateNoteRequest:
+    properties:
+      content:
+        type: string
+      timestamp:
+        type: number
+    required:
+    - content
+    - timestamp
+    type: object
+  internal_handler.LoginRequest:
     properties:
       password:
         type: string
@@ -24,14 +34,14 @@ definitions:
     - password
     - username
     type: object
-  handler.MarkReadRequest:
+  internal_handler.MarkReadRequest:
     properties:
       ids:
         items:
           type: integer
         type: array
     type: object
-  handler.OAuth2TokenResponse:
+  internal_handler.OAuth2TokenResponse:
     properties:
       access_token:
         type: string
@@ -40,7 +50,7 @@ definitions:
       token_type:
         type: string
     type: object
-  handler.PublishCommentRequest:
+  internal_handler.PublishCommentRequest:
     properties:
       content:
         type: string
@@ -51,7 +61,7 @@ definitions:
     required:
     - content
     type: object
-  handler.PublishVideoRequest:
+  internal_handler.PublishVideoRequest:
     properties:
       cover_url:
         type: string
@@ -70,14 +80,21 @@ definitions:
     - play_url
     - title
     type: object
-  handler.RefreshRequest:
+  internal_handler.RecordViewRequest:
+    properties:
+      play_token:
+        type: string
+    required:
+    - play_token
+    type: object
+  internal_handler.RefreshRequest:
     properties:
       refresh_token:
         type: string
     required:
     - refresh_token
     type: object
-  handler.RegisterRequest:
+  internal_handler.RegisterRequest:
     properties:
       password:
         maxLength: 128
@@ -91,7 +108,7 @@ definitions:
     - password
     - username
     type: object
-  handler.SendMessageRequest:
+  internal_handler.SendMessageRequest:
     properties:
       content:
         type: string
@@ -101,14 +118,14 @@ definitions:
     - content
     - to_id
     type: object
-  handler.UpdateProfileRequest:
+  internal_handler.UpdateProfileRequest:
     properties:
       avatar_url:
         type: string
       bio:
         type: string
     type: object
-  handler.UpdateUsernameRequest:
+  internal_handler.UpdateUsernameRequest:
     properties:
       username:
         maxLength: 30
@@ -117,7 +134,7 @@ definitions:
     required:
     - username
     type: object
-  handler.UpdateVideoRequest:
+  internal_handler.UpdateVideoRequest:
     properties:
       cover_url:
         type: string
@@ -130,7 +147,7 @@ definitions:
       title:
         type: string
     type: object
-  response.PageResponse:
+  tideflow_pkg_response.PageResponse:
     properties:
       has_more:
         type: boolean
@@ -138,7 +155,7 @@ definitions:
       next_cursor:
         type: string
     type: object
-  response.Response:
+  tideflow_pkg_response.Response:
     properties:
       code:
         type: integer
@@ -146,7 +163,21 @@ definitions:
       message:
         type: string
     type: object
-  response.TokenResponse:
+  tideflow_pkg_response.SearchResponse:
+    properties:
+      has_more:
+        type: boolean
+      items: {}
+      next_cursor:
+        type: string
+      page:
+        type: integer
+      size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  tideflow_pkg_response.TokenResponse:
     properties:
       access_token:
         type: string
@@ -175,22 +206,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.LoginRequest'
+          $ref: '#/definitions/internal_handler.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.TokenResponse'
+            $ref: '#/definitions/tideflow_pkg_response.TokenResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 用户登录
       tags:
       - 认证
@@ -203,11 +234,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 用户登出
@@ -235,15 +266,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handler.OAuth2TokenResponse'
+            $ref: '#/definitions/internal_handler.OAuth2TokenResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: OAuth2 Token (Swagger专用)
       tags:
       - 认证
@@ -258,22 +289,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.ChangePasswordRequest'
+          $ref: '#/definitions/internal_handler.ChangePasswordRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 修改密码
       tags:
       - 认证
@@ -288,18 +319,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.RefreshRequest'
+          $ref: '#/definitions/internal_handler.RefreshRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.TokenResponse'
+            $ref: '#/definitions/tideflow_pkg_response.TokenResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 刷新令牌
       tags:
       - 认证
@@ -314,22 +345,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.RegisterRequest'
+          $ref: '#/definitions/internal_handler.RegisterRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.TokenResponse'
+            $ref: '#/definitions/tideflow_pkg_response.TokenResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 用户注册
       tags:
       - 认证
@@ -352,11 +383,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 关注流
@@ -381,7 +412,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
       summary: 全局最新Feed
       tags:
       - 时间线
@@ -410,7 +441,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
       summary: 热门榜单
       tags:
       - 时间线
@@ -438,11 +469,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 按标签搜索视频
       tags:
       - 时间线
@@ -465,11 +496,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 我点赞过的视频
@@ -486,22 +517,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.SendMessageRequest'
+          $ref: '#/definitions/internal_handler.SendMessageRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 发送私信
@@ -516,11 +547,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 会话列表
@@ -550,15 +581,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 获取消息记录
@@ -579,20 +610,82 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 标记会话已读
       tags:
       - 私信
+  /api/v1/messages/share-video:
+    post:
+      consumes:
+      - application/json
+      description: 将视频预览消息批量发送给指定好友
+      parameters:
+      - description: 视频分享请求
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 分享视频给好友
+      tags:
+      - 私信
+  /api/v1/metrics/view:
+    post:
+      consumes:
+      - application/json
+      description: 验证 play_token，解析 user_id/ip，半小时限流后累加播放量
+      parameters:
+      - description: 播放记录
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.RecordViewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      summary: 上报播放记录
+      tags:
+      - 视频
   /api/v1/notifications:
     get:
       description: 获取当前用户的通知列表
@@ -612,11 +705,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 通知列表
@@ -632,18 +725,18 @@ paths:
         in: body
         name: body
         schema:
-          $ref: '#/definitions/handler.MarkReadRequest'
+          $ref: '#/definitions/internal_handler.MarkReadRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 标记通知已读
@@ -668,7 +761,7 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: SSE实时通知
@@ -683,16 +776,59 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 未读通知数
       tags:
       - 通知
+  /api/v1/search/videos:
+    get:
+      description: 通过关键词搜索视频，支持按热度或时间排序
+      parameters:
+      - description: 搜索关键词
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: 排序字段：popularity（默认）/ create_time
+        in: query
+        name: sort_by
+        type: string
+      - description: 排序方向：desc（默认）/ asc
+        in: query
+        name: order
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.SearchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 搜索视频
+      tags:
+      - 搜索
   /api/v1/tags/hot:
     get:
       description: 获取当前热门标签列表
@@ -702,7 +838,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 热门标签
       tags:
       - 标签
@@ -721,11 +857,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 获取指定用户信息
       tags:
       - 用户资料
@@ -753,15 +889,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 获取粉丝列表
@@ -791,20 +927,52 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 获取关注列表
       tags:
       - 社交关系
+  /api/v1/users/{id}/liked-videos:
+    get:
+      description: 获取指定用户点赞过的视频列表，若用户设置隐私则仅自己可见
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      summary: 查看用户点赞过的视频
+      tags:
+      - 互动
   /api/v1/users/{id}/social-counts:
     get:
       description: 获取指定用户的关注数和粉丝数
@@ -820,15 +988,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 获取社交数量
@@ -858,15 +1026,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 获取用户视频列表
@@ -887,15 +1055,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 取消关注
@@ -915,15 +1083,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 关注用户
@@ -938,11 +1106,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 获取当前用户信息
@@ -958,22 +1126,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.UpdateProfileRequest'
+          $ref: '#/definitions/internal_handler.UpdateProfileRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 更新个人资料
@@ -990,26 +1158,26 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.UpdateUsernameRequest'
+          $ref: '#/definitions/internal_handler.UpdateUsernameRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 修改用户名
@@ -1030,11 +1198,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 通过用户名查找用户
       tags:
       - 用户资料
@@ -1049,22 +1217,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PublishVideoRequest'
+          $ref: '#/definitions/internal_handler.PublishVideoRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 发布视频
@@ -1085,19 +1253,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 删除视频
@@ -1117,15 +1285,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 获取视频详情
       tags:
       - 视频
@@ -1144,26 +1312,26 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.UpdateVideoRequest'
+          $ref: '#/definitions/internal_handler.UpdateVideoRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 更新视频信息
@@ -1197,11 +1365,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.PageResponse'
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       summary: 评论列表
       tags:
       - 互动
@@ -1220,22 +1388,22 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.PublishCommentRequest'
+          $ref: '#/definitions/internal_handler.PublishCommentRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 发表评论
@@ -1261,15 +1429,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 删除评论
@@ -1290,15 +1458,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 取消点赞
@@ -1318,15 +1486,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 检查是否点赞
@@ -1346,20 +1514,126 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 点赞视频
       tags:
       - 互动
+  /api/v1/videos/{id}/notes:
+    get:
+      description: 获取视频的时间轴笔记列表，按时间戳升序排列
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 游标（时间戳）
+        in: query
+        name: cursor
+        type: string
+      - default: 50
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      summary: 获取视频笔记列表
+      tags:
+      - 笔记
+    post:
+      consumes:
+      - application/json
+      description: 在视频指定时间点创建笔记
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 笔记内容
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 创建视频笔记
+      tags:
+      - 笔记
+  /api/v1/videos/{id}/notes/{note_id}:
+    delete:
+      description: 删除指定笔记，仅笔记作者可删除
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 笔记ID
+        in: path
+        name: note_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 删除笔记
+      tags:
+      - 笔记
   /api/v1/videos/cover:
     post:
       consumes:
@@ -1377,15 +1651,15 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 上传封面
@@ -1408,18 +1682,136 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Response'
+            $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
       summary: 上传视频文件
+      tags:
+      - 视频
+  /api/v1/videos/upload/chunk:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 上传视频的一个分片
+      parameters:
+      - description: 上传会话ID
+        in: formData
+        name: upload_id
+        required: true
+        type: string
+      - description: 分片序号
+        in: formData
+        name: chunk_index
+        required: true
+        type: integer
+      - description: 分片文件
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 上传分片
+      tags:
+      - 视频
+  /api/v1/videos/upload/complete:
+    post:
+      consumes:
+      - application/json
+      description: 合并所有分片，返回视频播放URL和元信息
+      parameters:
+      - description: '{upload_id}'
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 完成切片上传
+      tags:
+      - 视频
+  /api/v1/videos/upload/init:
+    post:
+      consumes:
+      - application/json
+      description: 创建切片上传会话，返回 upload_id
+      parameters:
+      - description: 上传参数 {filename, file_size, chunk_size}
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 初始化切片上传
+      tags:
+      - 视频
+  /api/v1/videos/upload/status/{upload_id}:
+    get:
+      description: 查询切片上传会话的当前状态（用于断点续传）
+      parameters:
+      - description: 上传会话ID
+        in: path
+        name: upload_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 查询上传进度
       tags:
       - 视频
 securityDefinitions:

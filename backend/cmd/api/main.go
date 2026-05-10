@@ -33,6 +33,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	infraes "tideflow/infra/es"
 	infraredis "tideflow/infra/redis"
 	"tideflow/internal/config"
 	_ "tideflow/internal/docs"
@@ -62,7 +63,7 @@ func main() {
 
 	mqInstance, err := mq.NewMQ(&cfg.RabbitMQ)
 	if err != nil {
-		log.Printf("warning: failed to connect to MQ: %v", err)
+		log.Fatalf("failed to connect to MQ: %v", err)
 	}
 
 	cache := infraredis.NewCache(rdb)
@@ -79,6 +80,23 @@ func main() {
 	notifSvc := service.NewNotificationService(repo)
 	tagSvc := service.NewTagService(repo)
 	noteSvc := service.NewNoteService(repo)
+
+	var searchSvc *service.SearchService
+	var searchHandler *handler.SearchHandler
+	if len(cfg.Elasticsearch.Addresses) > 0 {
+		esClient, err := infraes.NewClient(&cfg.Elasticsearch)
+		if err != nil {
+			log.Printf("failed to connect to ES, search disabled: %v", err)
+		} else {
+			if err := esClient.EnsureIndex(context.Background()); err != nil {
+				log.Printf("failed to ensure ES index: %v", err)
+			} else {
+				log.Println("ES connected and index ready")
+				searchSvc = service.NewSearchService(esClient, cache, repo, cfg.BigVThreshold)
+				searchHandler = handler.NewSearchHandler(searchSvc)
+			}
+		}
+	}
 
 	authMw := middleware.NewAuthMiddleware(authSvc)
 	rateLimitMw := middleware.NewRateLimitMiddleware(rateLimiter)
@@ -97,7 +115,7 @@ func main() {
 	go hub.Run()
 	sseHandler := handler.NewSSEHandler(hub)
 
-	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, noteHandler, cfg)
+	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, noteHandler, searchHandler, cfg)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
@@ -150,6 +168,7 @@ func setupRouter(
 	sseHandler *handler.SSEHandler,
 	tagHandler *handler.TagHandler,
 	noteHandler *handler.NoteHandler,
+	searchHandler *handler.SearchHandler,
 	cfg *config.Config,
 ) *gin.Engine {
 	r := gin.Default()
@@ -228,6 +247,10 @@ func setupRouter(
 	r.GET("/api/v1/notifications/stream", authMw.SSERequireAuth(), sseHandler.Stream)
 
 	r.GET("/api/v1/tags/hot", tagHandler.GetHotTags)
+
+	if searchHandler != nil {
+		r.GET("/api/v1/search/videos", authMw.JWTAuth(), searchHandler.SearchVideos)
+	}
 
 	r.POST("/api/v1/metrics/view", videoHandler.RecordView)
 

@@ -61,3 +61,5 @@ docker-compose.override.yml
 
 # Test
 test/
+
+/ik_plugin/
