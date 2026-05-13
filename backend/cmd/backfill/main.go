@@ -12,6 +12,8 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"tideflow/internal/config"
 )
 
 type Video struct {
@@ -96,8 +98,12 @@ func extractMeta(fp string) (*VideoMeta, error) {
 }
 
 func main() {
-	dsn := "root:password@tcp(localhost:3306)/tideflow?charset=utf8mb4&parseTime=True&loc=Local"
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+	cfg, err := config.Load("../.env")
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	db, err := gorm.Open(mysql.Open(cfg.DB.DSN), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
@@ -116,7 +122,7 @@ func main() {
 
 	fmt.Printf("Found %d videos to backfill\n", len(videos))
 
-	uploadDir := "./uploads"
+	uploadDir := cfg.Upload.Dir
 	for _, v := range videos {
 		if v.PlayURL == "" {
 			continue
