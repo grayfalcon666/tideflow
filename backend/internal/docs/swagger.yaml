@@ -147,6 +147,63 @@ definitions:
       title:
         type: string
     type: object
+  tideflow_internal_service.CaptionEntry:
+    properties:
+      content:
+        type: string
+      end:
+        type: string
+      start:
+        type: string
+    type: object
+  tideflow_internal_service.LearningWord:
+    properties:
+      definition:
+        type: string
+      first_caption_start:
+        type: string
+      pos:
+        type: string
+      translation:
+        type: string
+      ukphone:
+        type: string
+      usphone:
+        type: string
+      value:
+        type: string
+    type: object
+  tideflow_internal_service.LearningWordsResponse:
+    properties:
+      list_name:
+        type: string
+      total:
+        type: integer
+      words:
+        items:
+          $ref: '#/definitions/tideflow_internal_service.LearningWord'
+        type: array
+    type: object
+  tideflow_internal_service.WordCaptionsResponse:
+    properties:
+      captions:
+        items:
+          $ref: '#/definitions/tideflow_internal_service.CaptionEntry'
+        type: array
+      word:
+        type: string
+    type: object
+  tideflow_internal_service.WordbankResponse:
+    properties:
+      size:
+        type: integer
+      video_id:
+        type: integer
+      words:
+        items:
+          type: integer
+        type: array
+    type: object
   tideflow_pkg_response.PageResponse:
     properties:
       has_more:
@@ -195,6 +252,36 @@ info:
   title: TideFlow 短视频 Feed 流 API
   version: v1
 paths:
+  /api/v1/admin/vocab/import:
+    post:
+      description: 扫描 VOCAB_LISTS_DIR 下的 .txt 文件并导入到 MySQL，然后重新加载内存缓存
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 导入考纲词表
+      tags:
+      - 管理
+  /api/v1/admin/vocab/reload:
+    post:
+      description: 从 MySQL 重新加载考纲词表到进程内存
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 重载考纲词表缓存
+      tags:
+      - 管理
   /api/v1/auth/login:
     post:
       consumes:
@@ -477,6 +564,21 @@ paths:
       summary: 按标签搜索视频
       tags:
       - 时间线
+  /api/v1/learn/lists:
+    get:
+      description: 返回所有预置的考纲词表（如四级、六级等）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 获取考纲词表列表
+      tags:
+      - 学习
   /api/v1/likes/mine:
     get:
       description: 获取当前用户点赞过的视频列表
@@ -1443,6 +1545,70 @@ paths:
       summary: 删除评论
       tags:
       - 互动
+  /api/v1/videos/{id}/learn/word/{word}/captions:
+    get:
+      description: 从视频词库中获取指定单词的所有字幕语境片段
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 单词
+        in: path
+        name: word
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_internal_service.WordCaptionsResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 获取单词语境例句
+      tags:
+      - 学习
+  /api/v1/videos/{id}/learn/words:
+    get:
+      description: 计算视频词库与指定考纲词表的交集，返回可用于学习的单词列表
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 词表ID
+        in: query
+        name: list_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_internal_service.LearningWordsResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "412":
+          description: Precondition Failed
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 获取视频中属于指定词表的单词
+      tags:
+      - 学习
   /api/v1/videos/{id}/like:
     delete:
       description: 取消对指定视频的点赞
@@ -1634,6 +1800,60 @@ paths:
       summary: 删除笔记
       tags:
       - 笔记
+  /api/v1/videos/{id}/wordbank:
+    get:
+      description: 获取视频的英语单词词库（含释义、音标、语境例句）
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_internal_service.WordbankResponse'
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 获取视频词库
+      tags:
+      - 词库
+  /api/v1/videos/{id}/wordbank/export:
+    get:
+      description: 导出视频词库为 JSON 文件下载
+      parameters:
+      - description: 视频ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 导出视频词库
+      tags:
+      - 词库
   /api/v1/videos/cover:
     post:
       consumes:

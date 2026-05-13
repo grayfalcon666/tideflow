@@ -63,6 +63,7 @@ func (m *MQ) setupExchanges() error {
 		routingKey string
 	}{
 		{"video.publish.queue", "video.events", "video.publish"},
+		{"subtitle.gen", "video.events", "video.publish"},
 		{"like.like.queue", "like.events", "like.like"},
 		{"like.unlike.queue", "like.events", "like.unlike"},
 		{"comment.publish.queue", "comment.events", "comment.publish"},

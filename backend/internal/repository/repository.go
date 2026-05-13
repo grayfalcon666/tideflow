@@ -636,3 +636,100 @@ func (r *Repository) GetHotTags(ctx context.Context, limit int) ([]models.Tag, e
 		Find(&tags).Error
 	return tags, err
 }
+
+// GetVideoSubtitleByVideoID returns the subtitle record for a video.
+func (r *Repository) GetVideoSubtitleByVideoID(ctx context.Context, videoID uint) (*models.VideoSubtitle, error) {
+	var sub models.VideoSubtitle
+	err := r.db.WithContext(ctx).First(&sub, videoID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &sub, nil
+}
+
+// UpsertVideoSubtitle inserts or updates a video subtitle record.
+func (r *Repository) UpsertVideoSubtitle(ctx context.Context, sub *models.VideoSubtitle) error {
+	return r.db.WithContext(ctx).
+		Exec(`INSERT INTO video_subtitles (video_id, subtitles, format, source, version, created_at, updated_at)
+		      VALUES (?, ?, ?, ?, 1, NOW(), NOW())
+		      ON DUPLICATE KEY UPDATE
+		        subtitles = VALUES(subtitles),
+		        format = VALUES(format),
+		        source = VALUES(source),
+		        version = version + 1,
+		        updated_at = NOW()`,
+			sub.VideoID, sub.Subtitles, sub.Format, sub.Source).Error
+}
+
+// GetVideoWordbankByVideoID returns the wordbank record for a video.
+func (r *Repository) GetVideoWordbankByVideoID(ctx context.Context, videoID uint) (*models.VideoWordbank, error) {
+	var wb models.VideoWordbank
+	err := r.db.WithContext(ctx).First(&wb, videoID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &wb, nil
+}
+
+// UpsertVideoWordbank inserts or updates a video wordbank record.
+func (r *Repository) UpsertVideoWordbank(ctx context.Context, wb *models.VideoWordbank) error {
+	return r.db.WithContext(ctx).
+		Exec(`INSERT INTO video_wordbank (video_id, words, size, version, created_at, updated_at)
+		      VALUES (?, ?, ?, 1, NOW(), NOW())
+		      ON DUPLICATE KEY UPDATE
+		        words = VALUES(words),
+		        size = VALUES(size),
+		        version = version + 1,
+		        updated_at = NOW()`,
+			wb.VideoID, wb.Words, wb.Size).Error
+}
+
+// CreateVocabList inserts a new vocab list.
+func (r *Repository) CreateVocabList(ctx context.Context, list *models.VocabList) error {
+	return r.db.WithContext(ctx).Create(list).Error
+}
+
+// UpsertVocabList inserts or updates a vocab list (ON DUPLICATE KEY UPDATE).
+func (r *Repository) UpsertVocabList(ctx context.Context, list *models.VocabList) error {
+	return r.db.WithContext(ctx).
+		Exec(`INSERT INTO vocab_lists (name, slug, language, total)
+		      VALUES (?, ?, ?, ?)
+		      ON DUPLICATE KEY UPDATE
+		        name = VALUES(name),
+		        total = VALUES(total)`,
+			list.Name, list.Slug, list.Language, list.Total).Error
+}
+
+// GetAllVocabLists returns all vocab lists.
+func (r *Repository) GetAllVocabLists(ctx context.Context) ([]*models.VocabList, error) {
+	var lists []*models.VocabList
+	err := r.db.WithContext(ctx).Find(&lists).Error
+	return lists, err
+}
+
+// GetVocabWordsByListID returns all words for a given vocab list.
+func (r *Repository) GetVocabWordsByListID(ctx context.Context, listID uint) ([]*models.VocabWord, error) {
+	var words []*models.VocabWord
+	err := r.db.WithContext(ctx).Where("list_id = ?", listID).Find(&words).Error
+	return words, err
+}
+
+// GetAllVocabWords returns all vocab words.
+func (r *Repository) GetAllVocabWords(ctx context.Context) ([]*models.VocabWord, error) {
+	var words []*models.VocabWord
+	err := r.db.WithContext(ctx).Find(&words).Error
+	return words, err
+}
+
+// BatchUpsertVocabWords inserts vocab words in batches, replacing existing ones for the same list.
+func (r *Repository) BatchUpsertVocabWords(ctx context.Context, words []*models.VocabWord) error {
+	if len(words) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).CreateInBatches(words, 500).Error
+}
+
+// DeleteVocabWordsByListID deletes all words for a given vocab list.
+func (r *Repository) DeleteVocabWordsByListID(ctx context.Context, listID uint) error {
+	return r.db.WithContext(ctx).Where("list_id = ?", listID).Delete(&models.VocabWord{}).Error
+}

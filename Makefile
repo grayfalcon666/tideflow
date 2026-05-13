@@ -10,7 +10,7 @@ help: ## Show this help message
 
 # ==================== Infrastructure ====================
 up: ## Start all infrastructure services
-	docker compose up -d mysql redis rabbitmq elasticsearch kibana
+	docker compose up -d mysql redis rabbitmq elasticsearch kibana subtitle-worker
 
 down: ## Stop all infrastructure services
 	docker compose down
@@ -33,6 +33,9 @@ build: ## Build API binary
 
 build-worker: ## Build Worker binary
 	cd backend && go build -o tideflow-worker cmd/worker/main.go
+
+build-subtitle: ## Build subtitle worker Docker image
+	docker compose build subtitle-worker
 
 clean: ## Clean build artifacts
 	rm -f backend/tideflow-api backend/tideflow-worker
@@ -65,6 +68,9 @@ logs-api: ## Tail API logs
 
 logs-worker: ## Tail Worker logs
 	docker compose logs -f worker
+
+logs-subtitle: ## Tail SubtitleWorker logs
+	docker compose logs -f subtitle-worker
 
 # ==================== Elasticsearch ====================
 es-health: ## Check ES cluster health

@@ -3,8 +3,8 @@
 .env.local
 
 # Docs and config (generated)
-docs/
-docs
+/docs/
+/docs
 
 # Claude
 .claude/
@@ -24,6 +24,13 @@ backend/*.test
 backend/*.out
 backend/tideflow-api
 backend/tideflow-worker
+
+#Python
+subtitle-worker/__pycache__
+subtitle-worker/whisper-models
+
+# Resources (large binaries)
+resources/stardict.db
 
 # Frontend
 frontend/node_modules/

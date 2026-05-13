@@ -23,6 +23,8 @@ const (
 	KeyDirtyVideos     = "dirty:videos"
 	KeyUploadSession   = "upload:%s"
 	KeyUploadChunks    = "upload:chunks:%s"
+	KeyVideoSubtitle   = "video:subtitle:%d"
+	KeyVideoWordbank   = "video:wordbank:%d"
 )
 
 func AccountToken(uid uint) string {
@@ -95,4 +97,12 @@ func UploadSession(uploadID string) string {
 
 func UploadChunks(uploadID string) string {
 	return fmt.Sprintf("%s:"+KeyUploadChunks, Version, uploadID)
+}
+
+func VideoSubtitle(vid uint) string {
+	return fmt.Sprintf("%s:"+KeyVideoSubtitle, Version, vid)
+}
+
+func VideoWordbank(vid uint) string {
+	return fmt.Sprintf("%s:"+KeyVideoWordbank, Version, vid)
 }

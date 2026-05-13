@@ -255,6 +255,25 @@ func (c *Cache) InvalidateVideoDetail(id uint) {
 	c.InvalidateVideo(id)
 }
 
+// InvalidateSubtitle deletes subtitle cache from L2 Redis.
+func (c *Cache) InvalidateSubtitle(videoID uint) {
+	key := VideoSubtitle(videoID)
+	c.rdb.Del(context.Background(), key)
+}
+
+// InvalidateWordbank deletes wordbank cache from L2 Redis.
+func (c *Cache) InvalidateWordbank(videoID uint) {
+	key := VideoWordbank(videoID)
+	c.rdb.Del(context.Background(), key)
+}
+
+// InvalidateVideoSubtitleAndWordbank deletes video entity, subtitle, and wordbank caches.
+func (c *Cache) InvalidateVideoSubtitleAndWordbank(videoID uint) {
+	c.InvalidateVideo(videoID)
+	c.InvalidateSubtitle(videoID)
+	c.InvalidateWordbank(videoID)
+}
+
 // ---------------------------------------------------------------
 // 冷拉取缓存重建
 // ---------------------------------------------------------------

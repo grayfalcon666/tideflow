@@ -80,6 +80,17 @@ func main() {
 	notifSvc := service.NewNotificationService(repo)
 	tagSvc := service.NewTagService(repo)
 	noteSvc := service.NewNoteService(repo)
+	wordbankSvc := service.NewWordbankService(repo, cache)
+
+	learningSvc := service.NewLearningService(repo, wordbankSvc)
+	if err := learningSvc.Init(context.Background()); err != nil {
+		log.Printf("learning: vocab not in DB, auto-importing from %s", cfg.VocabListsDir)
+		if err := learningSvc.ImportVocabLists(context.Background(), cfg.VocabListsDir); err != nil {
+			log.Printf("warning: failed to auto-import vocab lists: %v", err)
+		} else {
+			log.Println("learning: vocab auto-imported successfully")
+		}
+	}
 
 	var searchSvc *service.SearchService
 	var searchHandler *handler.SearchHandler
@@ -110,12 +121,15 @@ func main() {
 	notifHandler := handler.NewNotificationHandler(notifSvc)
 	tagHandler := handler.NewTagHandler(tagSvc)
 	noteHandler := handler.NewNoteHandler(noteSvc, userSvc)
+	wordbankHandler := handler.NewWordbankHandler(wordbankSvc)
+	learningHandler := handler.NewLearningHandler(learningSvc)
+	adminVocabHandler := handler.NewAdminVocabHandler(learningSvc, cfg.VocabListsDir)
 
 	hub := mq.NewSSEHub()
 	go hub.Run()
 	sseHandler := handler.NewSSEHandler(hub)
 
-	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, noteHandler, searchHandler, cfg)
+	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, noteHandler, wordbankHandler, searchHandler, learningHandler, adminVocabHandler, cfg)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
@@ -168,7 +182,10 @@ func setupRouter(
 	sseHandler *handler.SSEHandler,
 	tagHandler *handler.TagHandler,
 	noteHandler *handler.NoteHandler,
+	wordbankHandler *handler.WordbankHandler,
 	searchHandler *handler.SearchHandler,
+	learningHandler *handler.LearningHandler,
+	adminVocabHandler *handler.AdminVocabHandler,
 	cfg *config.Config,
 ) *gin.Engine {
 	r := gin.Default()
@@ -234,6 +251,18 @@ func setupRouter(
 	r.POST("/api/v1/videos/:id/notes", authMw.JWTAuth(), rateLimitMw.NoteLimit(), noteHandler.CreateNote)
 	r.GET("/api/v1/videos/:id/notes", authMw.SoftJWTAuth(), noteHandler.GetNotes)
 	r.DELETE("/api/v1/videos/:id/notes/:note_id", authMw.JWTAuth(), noteHandler.DeleteNote)
+
+	r.GET("/api/v1/videos/:id/wordbank", authMw.JWTAuth(), wordbankHandler.GetWordbank)
+	r.GET("/api/v1/videos/:id/wordbank/export", authMw.JWTAuth(), wordbankHandler.ExportWordbank)
+
+	// 学习接口
+	r.GET("/api/v1/learn/lists", authMw.JWTAuth(), learningHandler.GetLists)
+	r.GET("/api/v1/videos/:id/learn/words", authMw.JWTAuth(), learningHandler.GetLearningWords)
+	r.GET("/api/v1/videos/:id/learn/word/:word/captions", authMw.JWTAuth(), learningHandler.GetWordCaptions)
+
+	// 管理接口
+	r.POST("/api/v1/admin/vocab/import", authMw.JWTAuth(), adminVocabHandler.ImportVocabLists)
+	r.POST("/api/v1/admin/vocab/reload", authMw.JWTAuth(), adminVocabHandler.ReloadVocab)
 
 	r.POST("/api/v1/messages", authMw.JWTAuth(), msgHandler.SendMessage)
 	r.GET("/api/v1/messages/conversations", authMw.JWTAuth(), msgHandler.GetConversations)

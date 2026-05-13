@@ -16,6 +16,56 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/admin/vocab/import": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "扫描 VOCAB_LISTS_DIR 下的 .txt 文件并导入到 MySQL，然后重新加载内存缓存",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理"
+                ],
+                "summary": "导入考纲词表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/vocab/reload": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "从 MySQL 重新加载考纲词表到进程内存",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理"
+                ],
+                "summary": "重载考纲词表缓存",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/login": {
             "post": {
                 "description": "使用用户名密码登录，返回access_token和refresh_token",
@@ -441,6 +491,31 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/learn/lists": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "返回所有预置的考纲词表（如四级、六级等）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "学习"
+                ],
+                "summary": "获取考纲词表列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
@@ -2245,6 +2320,106 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/videos/{id}/learn/word/{word}/captions": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "从视频词库中获取指定单词的所有字幕语境片段",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "学习"
+                ],
+                "summary": "获取单词语境例句",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "视频ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "单词",
+                        "name": "word",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_internal_service.WordCaptionsResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/videos/{id}/learn/words": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "计算视频词库与指定考纲词表的交集，返回可用于学习的单词列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "学习"
+                ],
+                "summary": "获取视频中属于指定词表的单词",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "视频ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "词表ID",
+                        "name": "list_id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_internal_service.LearningWordsResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "412": {
+                        "description": "Precondition Failed",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/videos/{id}/like": {
             "get": {
                 "security": [
@@ -2541,6 +2716,92 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/api/v1/videos/{id}/wordbank": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "获取视频的英语单词词库（含释义、音标、语境例句）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "词库"
+                ],
+                "summary": "获取视频词库",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "视频ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_internal_service.WordbankResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/videos/{id}/wordbank/export": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "导出视频词库为 JSON 文件下载",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "词库"
+                ],
+                "summary": "导出视频词库",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "视频ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -2762,6 +3023,94 @@ const docTemplate = `{
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "tideflow_internal_service.CaptionEntry": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "end": {
+                    "type": "string"
+                },
+                "start": {
+                    "type": "string"
+                }
+            }
+        },
+        "tideflow_internal_service.LearningWord": {
+            "type": "object",
+            "properties": {
+                "definition": {
+                    "type": "string"
+                },
+                "first_caption_start": {
+                    "type": "string"
+                },
+                "pos": {
+                    "type": "string"
+                },
+                "translation": {
+                    "type": "string"
+                },
+                "ukphone": {
+                    "type": "string"
+                },
+                "usphone": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "tideflow_internal_service.LearningWordsResponse": {
+            "type": "object",
+            "properties": {
+                "list_name": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "words": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tideflow_internal_service.LearningWord"
+                    }
+                }
+            }
+        },
+        "tideflow_internal_service.WordCaptionsResponse": {
+            "type": "object",
+            "properties": {
+                "captions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tideflow_internal_service.CaptionEntry"
+                    }
+                },
+                "word": {
+                    "type": "string"
+                }
+            }
+        },
+        "tideflow_internal_service.WordbankResponse": {
+            "type": "object",
+            "properties": {
+                "size": {
+                    "type": "integer"
+                },
+                "video_id": {
+                    "type": "integer"
+                },
+                "words": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },

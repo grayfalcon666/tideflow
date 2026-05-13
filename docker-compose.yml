@@ -71,6 +71,42 @@ services:
     depends_on:
       - elasticsearch
 
+  subtitle-worker:
+    build:
+      context: ./subtitle-worker
+      dockerfile: Dockerfile
+    container_name: tideflow-subtitle-worker
+    env_file:
+      - .env
+    environment:
+      # Docker-specific overrides (service names instead of localhost, GPU settings)
+      - MYSQL_HOST=mysql
+      - REDIS_HOST=redis
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - UPLOAD_DIR=/app/uploads
+      - ECDICT_PATH=/app/stardict.db
+      - WHISPER_MODEL=small.en
+      - WHISPER_DEVICE=cuda
+      - WHISPER_COMPUTE_TYPE=int8_float16
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./resources/stardict.db:/app/stardict.db
+      - ./subtitle-worker/whisper-models:/root/.cache/huggingface
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
 volumes:
   mysql_data:
   redis_data:

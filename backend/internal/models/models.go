@@ -41,7 +41,9 @@ type Video struct {
 	CommentCount int64          `gorm:"not null;default:0" json:"comment_count"`
 	ViewCount    int64          `gorm:"not null;default:0" json:"view_count"`
 	Popularity   int64          `gorm:"not null;default:0;index:idx_videos_popularity_time_id,priority:1" json:"popularity"`
-	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+	SubtitleStatus string         `gorm:"size:20;not null;default:'none'" json:"subtitle_status"`
+	WordbankStatus string         `gorm:"size:20;not null;default:'none'" json:"wordbank_status"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 
 	// 虚拟字段（非持久化），由 feed service 填充
 	AvatarURL string `gorm:"-" json:"avatar_url,omitempty"`
@@ -169,4 +171,53 @@ type Note struct {
 
 func (Note) TableName() string {
 	return "notes"
+}
+
+type VideoSubtitle struct {
+	VideoID   uint      `gorm:"primaryKey" json:"video_id"`
+	Subtitles string    `gorm:"type:json;not null" json:"subtitles"`
+	Format    string    `gorm:"size:20;not null;default:'json'" json:"format"`
+	Source    string    `gorm:"size:20;not null" json:"source"`
+	Version   int       `gorm:"not null;default:1" json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (VideoSubtitle) TableName() string {
+	return "video_subtitles"
+}
+
+type VideoWordbank struct {
+	VideoID   uint      `gorm:"primaryKey" json:"video_id"`
+	Words     string    `gorm:"type:json;not null" json:"words"`
+	Size      int       `gorm:"not null;default:0" json:"size"`
+	Version   int       `gorm:"not null;default:1" json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (VideoWordbank) TableName() string {
+	return "video_wordbank"
+}
+
+type VocabList struct {
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	Name     string `gorm:"size:100;uniqueIndex;not null" json:"name"`
+	Slug     string `gorm:"size:50;uniqueIndex;not null" json:"slug"`
+	Language string `gorm:"size:20;not null;default:'en'" json:"language"`
+	Total    int    `gorm:"not null;default:0" json:"total"`
+}
+
+func (VocabList) TableName() string {
+	return "vocab_lists"
+}
+
+type VocabWord struct {
+	ID     uint   `gorm:"primaryKey" json:"-"`
+	ListID uint   `gorm:"index:idx_vocab_words_list_word,priority:1;not null" json:"list_id"`
+	Word   string `gorm:"size:100;index:idx_vocab_words_list_word,priority:2;not null" json:"word"`
+}
+
+func (VocabWord) TableName() string {
+	return "vocab_words"
 }

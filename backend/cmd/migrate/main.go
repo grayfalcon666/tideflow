@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"gorm.io/driver/mysql"
@@ -29,6 +32,10 @@ func main() {
 		log.Fatalf("failed to migrate: %v", err)
 	}
 
+	if err := seedVocabLists(db, cfg.VocabListsDir); err != nil {
+		log.Printf("warning: failed to seed vocab lists: %v", err)
+	}
+
 	log.Println("migration completed successfully")
 }
 
@@ -45,6 +52,10 @@ func migrate(db *gorm.DB) error {
 		&models.OutboxMsg{},
 		&models.Notification{},
 		&models.Note{},
+		&models.VideoSubtitle{},
+		&models.VideoWordbank{},
+		&models.VocabList{},
+		&models.VocabWord{},
 	); err != nil {
 		return err
 	}
@@ -68,4 +79,114 @@ func migrate(db *gorm.DB) error {
 
 func isDuplicateIndexErr(err error) bool {
 	return err != nil && (strings.Contains(err.Error(), "Duplicate key name") || strings.Contains(err.Error(), "index already exists"))
+}
+
+// seedVocabLists scans the given directory for .txt files, reads each line as a word,
+// and upserts vocab_lists and vocab_words into the database.
+// File name without extension becomes the slug/name (e.g. "cet4.txt" → slug="cet4", name="四级词汇").
+func seedVocabLists(db *gorm.DB, dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("vocab lists directory not found (%s), skipping seed", dir)
+			return nil
+		}
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".txt" {
+			continue
+		}
+
+		slug := strings.TrimSuffix(entry.Name(), ".txt")
+		name := slugToName(slug)
+
+		filePath := filepath.Join(dir, entry.Name())
+		words, err := readWordFile(filePath)
+		if err != nil {
+			log.Printf("warning: failed to read %s: %v", filePath, err)
+			continue
+		}
+		if len(words) == 0 {
+			continue
+		}
+
+		// Upsert vocab list
+		if err := db.Exec(`INSERT INTO vocab_lists (name, slug, language, total)
+			VALUES (?, ?, 'en', ?)
+			ON DUPLICATE KEY UPDATE total = VALUES(total)`,
+			name, slug, len(words)).Error; err != nil {
+			log.Printf("warning: failed to upsert vocab list %s: %v", slug, err)
+			continue
+		}
+
+		// Get list ID
+		var listID uint
+		if err := db.Raw("SELECT id FROM vocab_lists WHERE slug = ?", slug).Scan(&listID).Error; err != nil || listID == 0 {
+			log.Printf("warning: failed to get list ID for %s: %v", slug, err)
+			continue
+		}
+
+		// Replace words: delete old, batch insert new
+		db.Exec("DELETE FROM vocab_words WHERE list_id = ?", listID)
+
+		batch := make([]models.VocabWord, 0, 500)
+		for _, word := range words {
+			word = strings.TrimSpace(strings.ToLower(word))
+			if word == "" {
+				continue
+			}
+			batch = append(batch, models.VocabWord{ListID: listID, Word: word})
+			if len(batch) >= 500 {
+				if err := db.CreateInBatches(batch, 500).Error; err != nil {
+					log.Printf("warning: failed to insert words for %s: %v", slug, err)
+					break
+				}
+				batch = batch[:0]
+			}
+		}
+		if len(batch) > 0 {
+			if err := db.CreateInBatches(batch, 500).Error; err != nil {
+				log.Printf("warning: failed to insert remaining words for %s: %v", slug, err)
+			}
+		}
+
+		log.Printf("seeded vocab list: %s (%d words)", slug, len(words))
+	}
+
+	return nil
+}
+
+func slugToName(slug string) string {
+	names := map[string]string{
+		"gaokao": "高考词汇",
+		"cet4":   "四级词汇",
+		"cet6":   "六级词汇",
+		"ielts":  "雅思词汇",
+		"toefl":  "托福词汇",
+		"gre":    "GRE词汇",
+	}
+	if name, ok := names[slug]; ok {
+		return name
+	}
+	return strings.ToUpper(slug)
+}
+
+func readWordFile(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var words []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			words = append(words, line)
+		}
+	}
+	return words, scanner.Err()
 }
