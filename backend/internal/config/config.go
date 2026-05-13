@@ -13,10 +13,11 @@ type Config struct {
 	RabbitMQ      RabbitMQConfig
 	Elasticsearch ElasticsearchConfig
 	JWT           JWTConfig
-	Server        ServerConfig
-	Upload        UploadConfig
-	BigVThreshold int
-	RateLimits    RateLimitsConfig
+	Server         ServerConfig
+	Upload         UploadConfig
+	BigVThreshold  int
+	VocabListsDir  string
+	RateLimits     RateLimitsConfig
 }
 
 type DBConfig struct {
@@ -25,6 +26,7 @@ type DBConfig struct {
 
 type RedisConfig struct {
 	Host     string
+	Port     int
 	Password string
 	DB       int
 }
@@ -77,6 +79,7 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("SERVER_PORT", "8080")
 	v.SetDefault("UPLOAD_DIR", "./uploads")
 	v.SetDefault("BIG_V_THRESHOLD", 10000)
+	v.SetDefault("VOCAB_LISTS_DIR", "../resources/vocab_lists")
 	v.SetDefault("ES_ADDRESSES", "http://localhost:9200")
 	v.SetDefault("ES_USERNAME", "")
 	v.SetDefault("ES_PASSWORD", "")
@@ -96,6 +99,10 @@ func Load(path string) (*Config, error) {
 
 	cfg.DB.DSN = v.GetString("DSN")
 	cfg.Redis.Host = v.GetString("REDIS_HOST")
+	cfg.Redis.Port = v.GetInt("REDIS_PORT")
+	if cfg.Redis.Port == 0 {
+		cfg.Redis.Port = 6379
+	}
 	cfg.Redis.Password = v.GetString("REDIS_PASSWORD")
 	cfg.Redis.DB = v.GetInt("REDIS_DB")
 	cfg.RabbitMQ.URL = v.GetString("RABBITMQ_URL")
@@ -113,6 +120,7 @@ func Load(path string) (*Config, error) {
 	cfg.Server.Port = v.GetString("SERVER_PORT")
 	cfg.Upload.Dir = v.GetString("UPLOAD_DIR")
 	cfg.BigVThreshold = v.GetInt("BIG_V_THRESHOLD")
+	cfg.VocabListsDir = v.GetString("VOCAB_LISTS_DIR")
 
 	cfg.JWT.AccessExpiry, _ = time.ParseDuration(v.GetString("JWT_ACCESS_EXPIRY"))
 	if cfg.JWT.AccessExpiry == 0 {
