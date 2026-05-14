@@ -8,6 +8,7 @@ import VideoMetaSection from '../components/video/VideoMetaSection.vue'
 import VideoCommentPreview from '../components/video/VideoCommentPreview.vue'
 import CommentDrawer from '../components/comment/CommentDrawer.vue'
 import NotePanel from '../components/note/NotePanel.vue'
+import LearnPanel from '../components/learn/LearnPanel.vue'
 import { useVideoControls } from '../composables/useVideoControls'
 import * as videoService from '../services/video'
 import * as noteService from '../services/note'
@@ -23,6 +24,7 @@ const loading = ref(true)
 const error = ref('')
 const showDrawer = ref(false)
 const showNotePanel = ref(false)
+const showLearnPanel = ref(false)
 const videoPlayerRef = ref<InstanceType<typeof VideoPlayer>>()
 const playerCurrentTime = ref(0)
 const playerNoteTimestamps = ref<number[]>([])
@@ -146,6 +148,16 @@ onMounted(async () => {
         <TFIcon name="chevron_right" :size="20" color="var(--text-muted)" />
       </div>
 
+      <div
+        v-if="video.wordbank_status === 'ready'"
+        class="note-entry"
+        @click="showLearnPanel = true"
+      >
+        <TFIcon name="school" :size="20" color="#1ed760" />
+        <span class="note-entry-label">学习模式</span>
+        <TFIcon name="chevron_right" :size="20" color="var(--text-muted)" />
+      </div>
+
       <VideoCommentPreview
         :videoId="videoId"
         :commentCount="video.comment_count"
@@ -162,6 +174,12 @@ onMounted(async () => {
         :videoId="videoId"
         :currentTime="playerCurrentTime"
         @seek="handleNoteSeek"
+      />
+
+      <LearnPanel
+        v-model="showLearnPanel"
+        :videoId="videoId"
+        :videoPlayerRef="videoPlayerRef"
       />
     </template>
   </div>

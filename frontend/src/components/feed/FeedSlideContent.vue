@@ -11,6 +11,7 @@ defineProps<{
   muted?: boolean
   noteTimestamps?: number[]
   noteCount?: number
+  wordbankStatus?: import('../../types').WordbankStatus
 }>()
 
 const emit = defineEmits<{
@@ -18,6 +19,7 @@ const emit = defineEmits<{
   (e: 'openNotes', videoId: number): void
   (e: 'share', videoId: number): void
   (e: 'timeupdate'): void
+  (e: 'openLearn', videoId: number): void
 }>()
 </script>
 
@@ -46,7 +48,7 @@ const emit = defineEmits<{
       <SlideInfoBar :item="item" />
     </div>
     <div class="slide-overlay-actions">
-      <SlideActionBar :item="item" :noteCount="noteCount ?? 0" @openComments="emit('openComments', item?.video_id)" @openNotes="emit('openNotes', item?.video_id)" @share="emit('share', item?.video_id)" />
+      <SlideActionBar :item="item" :noteCount="noteCount ?? 0" :wordbankStatus="wordbankStatus" @openComments="emit('openComments', item?.video_id)" @openNotes="emit('openNotes', item?.video_id)" @share="emit('share', item?.video_id)" @openLearn="emit('openLearn', item?.video_id)" />
     </div>
   </div>
 </template>

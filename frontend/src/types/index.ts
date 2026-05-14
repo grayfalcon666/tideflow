@@ -79,12 +79,42 @@ export interface VideoItem {
   height?: number
   duration?: number
   play_token?: string
+  wordbank_status?: WordbankStatus
 }
 
+// ============ Learn ============
+export type WordbankStatus = 'none' | 'pending' | 'ready' | 'failed'
+
+export interface VocabList {
+  id: number
+  name: string
+  slug: string
+  language: string
+  total: number
+}
+
+export interface LearnWord {
+  value: string
+  usphone: string
+  ukphone: string
+  definition: string
+  translation: string
+  pos: string
+  first_caption_start: string
+}
+
+export interface Caption {
+  start: string
+  end: string
+  content: string
+}
+
+// ============ Video (extend) ============
 export interface VideoDetail extends VideoItem {
   is_following_author: boolean
   view_count: number
   play_token?: string
+  wordbank_status?: WordbankStatus
 }
 
 // ============ Feed ============

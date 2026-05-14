@@ -215,6 +215,7 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 		"is_liked":            isLiked,
 		"is_following_author": isFollowing,
 		"play_token":          playToken,
+		"wordbank_status":     video.WordbankStatus,
 	})
 }
 

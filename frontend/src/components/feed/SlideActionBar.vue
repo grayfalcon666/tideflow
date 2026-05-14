@@ -10,6 +10,7 @@ import TFIcon from '../common/TFIcon.vue'
 const props = defineProps<{
   item: VideoItem
   noteCount?: number
+  wordbankStatus?: import('../../types').WordbankStatus
 }>()
 
 const router = useRouter()
@@ -66,6 +67,7 @@ const emit = defineEmits<{
   openComments: [videoId: number]
   openNotes: [videoId: number]
   share: [videoId: number]
+  openLearn: [videoId: number]
 }>()
 
 const formatCount = (n: number) => {
@@ -95,6 +97,9 @@ const formatCount = (n: number) => {
     </div>
     <div class="action-item" @click="handleShare">
       <TFIcon name="share" :size="28" />
+    </div>
+    <div v-if="props.wordbankStatus === 'ready'" class="action-item" @click="(e) => { e.stopPropagation(); emit('openLearn', props.item.video_id) }">
+      <TFIcon name="school" :size="28" color="#1ed760" />
     </div>
   </div>
 </template>

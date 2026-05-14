@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { VideoItem } from '../types'
+import type { VideoItem, WordbankStatus } from '../types'
 import * as feedService from '../services/feed'
 
 type RawVideoItem = {
@@ -24,6 +24,7 @@ type RawVideoItem = {
   height?: number
   duration?: number
   play_token?: string
+  wordbank_status?: string
 }
 
 // Normalize flat backend video to frontend VideoItem
@@ -53,6 +54,7 @@ const normalizeVideo = (v: RawVideoItem): VideoItem => ({
   height: v.height,
   duration: v.duration,
   play_token: v.play_token,
+  wordbank_status: v.wordbank_status as WordbankStatus | undefined,
 })
 
 const normalizeVideos = (items: RawVideoItem[]): VideoItem[] =>

@@ -8,6 +8,7 @@ import CommentDrawer from '../components/comment/CommentDrawer.vue'
 import NotePanel from '../components/note/NotePanel.vue'
 import ShareMenu from '../components/video/ShareMenu.vue'
 import BottomNav from '../components/layout/BottomNav.vue'
+import LearnPanel from '../components/learn/LearnPanel.vue'
 import { useVideoControls } from '../composables/useVideoControls'
 import { useFeedStore, type FeedTab } from '../stores/feed'
 import { useAuthStore } from '../stores/auth'
@@ -36,6 +37,8 @@ const shareVideoCover = ref('')
 const shareAuthorName = ref('')
 const notePanelOpen = ref(false)
 const noteVideoId = ref(0)
+const learnPanelOpen = ref(false)
+const learnVideoId = ref(0)
 const feedPlayerTime = ref(0)
 const noteTimestampsMap = ref<Record<number, number[]>>({})
 let timePollTimer: ReturnType<typeof setInterval> | null = null
@@ -125,6 +128,11 @@ const handleOpenNotes = (videoId: number) => {
   notePanelOpen.value = true
   fetchFeedNoteTimestamps(videoId)
   startTimePoll()
+}
+
+const handleOpenLearn = (videoId: number) => {
+  learnVideoId.value = videoId
+  learnPanelOpen.value = true
 }
 
 const handleFeedNoteSeek = (timestamp: number) => {
@@ -323,6 +331,8 @@ const onKeyDown = (e: KeyboardEvent) => {
             @openComments="(videoId) => { commentVideoId = videoId; commentDrawerOpen = true }"
             @openNotes="(videoId) => handleOpenNotes(videoId)"
             @share="(videoId: number) => handleShare(item)"
+            @openLearn="(videoId: number) => handleOpenLearn(videoId)"
+            :wordbankStatus="item.wordbank_status"
             @timeupdate="notePanelOpen && (feedPlayerTime = getActivePlayer()?.getCurrentTime?.() ?? 0)"
           />
         </template>
@@ -351,6 +361,12 @@ const onKeyDown = (e: KeyboardEvent) => {
       :videoTitle="shareVideoTitle"
       :videoCover="shareVideoCover"
       :authorName="shareAuthorName"
+    />
+
+    <LearnPanel
+      v-model="learnPanelOpen"
+      :videoId="learnVideoId"
+      :videoPlayerRef="getActivePlayer()"
     />
   </div>
 </template>
