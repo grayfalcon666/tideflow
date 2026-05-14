@@ -82,14 +82,10 @@ func main() {
 	noteSvc := service.NewNoteService(repo)
 	wordbankSvc := service.NewWordbankService(repo, cache)
 
+	// Scan vocab dir on startup: import new files, skip existing, delete removed
 	learningSvc := service.NewLearningService(repo, wordbankSvc)
-	if err := learningSvc.Init(context.Background()); err != nil {
-		log.Printf("learning: vocab not in DB, auto-importing from %s", cfg.VocabListsDir)
-		if err := learningSvc.ImportVocabLists(context.Background(), cfg.VocabListsDir); err != nil {
-			log.Printf("warning: failed to auto-import vocab lists: %v", err)
-		} else {
-			log.Println("learning: vocab auto-imported successfully")
-		}
+	if err := learningSvc.ImportVocabLists(context.Background(), cfg.VocabListsDir); err != nil {
+		log.Printf("warning: vocab import failed: %v", err)
 	}
 
 	var searchSvc *service.SearchService

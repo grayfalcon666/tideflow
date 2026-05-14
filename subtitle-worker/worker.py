@@ -188,7 +188,8 @@ class SubtitleWorker:
             database.delete_redis_keys(r, video_id)
 
             # 12. Notify author
-            _notify_author(cursor, video_id, author_id, "ready")
+            video_title = video.get("title", "your video")
+            _notify_author(cursor, video_id, author_id, "ready", video_title)
             conn.commit()
 
             logger.info("Video %d: wordbank ready, %d words", video_id, len(wordbank))
@@ -254,12 +255,12 @@ class SubtitleWorker:
         logger.info("SubtitleWorker stopped")
 
 
-def _notify_author(cursor, video_id, author_id, status):
+def _notify_author(cursor, video_id, author_id, status, video_title=""):
     """Create a notification for the video author about wordbank status."""
     if not author_id:
         return
     if status == "ready":
-        content = "Your video's English wordbank is ready"
+        content = f'Your video "{video_title}" now has an English wordbank ready for learning'
     else:
         content = "Your video's English wordbank generation failed (no speech detected)"
     database.create_notification(

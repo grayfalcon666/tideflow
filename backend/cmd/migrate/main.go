@@ -81,10 +81,12 @@ func isDuplicateIndexErr(err error) bool {
 	return err != nil && (strings.Contains(err.Error(), "Duplicate key name") || strings.Contains(err.Error(), "index already exists"))
 }
 
-// seedVocabLists scans the given directory for .txt files, reads each line as a word,
-// and upserts vocab_lists and vocab_words into the database.
-// File name without extension becomes the slug/name (e.g. "cet4.txt" → slug="cet4", name="四级词汇").
+// seedVocabLists scans the given directory for .txt files, imports new ones,
+// and deletes lists whose files have been removed from disk.
+// File name without extension becomes the slug (e.g. "cet4.txt" → slug="cet4").
 func seedVocabLists(db *gorm.DB, dir string) error {
+	// 1. Scan directory for .txt files → fileSlugs set
+	fileSlugs := make(map[string]string) // slug → filePath
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -93,16 +95,40 @@ func seedVocabLists(db *gorm.DB, dir string) error {
 		}
 		return err
 	}
-
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".txt" {
 			continue
 		}
-
 		slug := strings.TrimSuffix(entry.Name(), ".txt")
-		name := slugToName(slug)
+		fileSlugs[slug] = filepath.Join(dir, entry.Name())
+	}
 
-		filePath := filepath.Join(dir, entry.Name())
+	// 2. Get existing lists from DB
+	var existingLists []models.VocabList
+	db.Find(&existingLists)
+	existingSlugs := make(map[string]uint) // slug → listID
+	for _, l := range existingLists {
+		existingSlugs[l.Slug] = l.ID
+	}
+
+	// 3. Delete lists whose files no longer exist on disk
+	for slug, listID := range existingSlugs {
+		if _, ok := fileSlugs[slug]; ok {
+			continue
+		}
+		log.Printf("file removed, deleting vocab list: %s (id=%d)", slug, listID)
+		db.Where("list_id = ?", listID).Delete(&models.VocabWord{})
+		db.Delete(&models.VocabList{}, listID)
+	}
+
+	// 4. Import new files (skip if slug already exists in DB)
+	for slug, filePath := range fileSlugs {
+		if _, exists := existingSlugs[slug]; exists {
+			log.Printf("vocab list already exists, skipping: %s", slug)
+			continue
+		}
+
+		name := slugToName(slug)
 		words, err := readWordFile(filePath)
 		if err != nil {
 			log.Printf("warning: failed to read %s: %v", filePath, err)
@@ -128,9 +154,7 @@ func seedVocabLists(db *gorm.DB, dir string) error {
 			continue
 		}
 
-		// Replace words: delete old, batch insert new
-		db.Exec("DELETE FROM vocab_words WHERE list_id = ?", listID)
-
+		// Insert words
 		batch := make([]models.VocabWord, 0, 500)
 		for _, word := range words {
 			word = strings.TrimSpace(strings.ToLower(word))

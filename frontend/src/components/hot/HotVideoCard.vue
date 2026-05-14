@@ -13,6 +13,8 @@ defineProps<{
     likes_count: number
     comment_count: number
     view_count?: number
+    wordbank_status?: string
+    subtitle_status?: string
   } | null
 }>()
 
@@ -46,6 +48,9 @@ const formatCount = (n: number) => {
         <span><TFIcon name="favorite" :size="14" /> {{ formatCount(item?.likes_count ?? 0) }}</span>
         <span><TFIcon name="chat_bubble_outline" :size="14" /> {{ formatCount(item?.comment_count ?? 0) }}</span>
         <span><TFIcon name="visibility" :size="14" /> {{ formatCount(item?.view_count ?? 0) }}</span>
+        <span v-if="item?.wordbank_status === 'ready' && item?.subtitle_status === 'ready'" class="stat-learn">
+          <TFIcon name="school" :size="14" color="#1ed760" />
+        </span>
       </div>
     </div>
   </div>

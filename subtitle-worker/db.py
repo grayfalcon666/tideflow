@@ -6,7 +6,7 @@ import config
 
 def get_mysql_connection():
     """Create a new MySQL connection."""
-    return pymysql.connect(
+    conn = pymysql.connect(
         host=config.MYSQL_HOST,
         port=config.MYSQL_PORT,
         user=config.MYSQL_USER,
@@ -15,6 +15,8 @@ def get_mysql_connection():
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
     )
+    conn.query("SET time_zone = '+08:00'")
+    return conn
 
 
 def get_redis_client():

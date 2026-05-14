@@ -256,51 +256,73 @@ func (s *LearningService) GetWordCaptions(ctx context.Context, videoID uint, wor
 	return nil, ErrWordNotInWb
 }
 
-// ImportVocabLists scans the given directory for .txt files and imports them into MySQL,
-// then reloads the in-memory cache.
+// ImportVocabLists scans the given directory for .txt files and imports new ones into MySQL.
+// Lists whose corresponding file no longer exists on disk are deleted from MySQL.
+// Lists whose slug already exists in the database are skipped entirely.
 func (s *LearningService) ImportVocabLists(ctx context.Context, dir string) error {
+	// 1. Scan directory for .txt files → fileSlugs set
+	fileSlugs := make(map[string]string) // slug → filePath
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
-
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".txt" {
 			continue
 		}
-
 		slug := strings.TrimSuffix(entry.Name(), ".txt")
-		name := slugToName(slug)
+		fileSlugs[slug] = filepath.Join(dir, entry.Name())
+	}
 
-		filePath := filepath.Join(dir, entry.Name())
-		content, err := os.ReadFile(filePath)
-		if err != nil {
-			slog.Warn("learning: failed to read vocab file", "path", filePath, "err", err)
+	// 2. Get existing lists from DB
+	existingLists, err := s.repo.GetAllVocabLists(ctx)
+	if err != nil {
+		return err
+	}
+	existingSlugs := make(map[string]*models.VocabList) // slug → list
+	for _, l := range existingLists {
+		existingSlugs[l.Slug] = l
+	}
+
+	// 3. Delete lists whose files no longer exist on disk
+	for slug, list := range existingSlugs {
+		if _, ok := fileSlugs[slug]; ok {
+			continue
+		}
+		slog.Info("learning: file removed, deleting vocab list", "slug", slug, "list_id", list.ID)
+		if err := s.repo.DeleteVocabWordsByListID(ctx, list.ID); err != nil {
+			slog.Warn("learning: failed to delete words for removed list", "slug", slug, "err", err)
+			continue
+		}
+		if err := s.repo.DeleteVocabList(ctx, list.ID); err != nil {
+			slog.Warn("learning: failed to delete list", "slug", slug, "err", err)
+		}
+	}
+
+	// 4. Import new files (skip if slug already exists in DB)
+	for slug, filePath := range fileSlugs {
+		if _, exists := existingSlugs[slug]; exists {
+			slog.Info("learning: list already exists, skipping", "slug", slug)
 			continue
 		}
 
-		lines := strings.Split(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n")
-		var wordModels []*models.VocabWord
-		for _, line := range lines {
-			word := strings.TrimSpace(strings.ToLower(line))
-			if word == "" {
-				continue
-			}
-			wordModels = append(wordModels, &models.VocabWord{Word: word})
+		name := slugToName(strings.ToLower(slug))
+		wordModels, err := parseVocabFile(filePath, slug)
+		if err != nil {
+			slog.Warn("learning: failed to parse vocab file", "slug", slug, "err", err)
+			continue
 		}
-
 		if len(wordModels) == 0 {
 			continue
 		}
 
-		// Upsert list
 		list := &models.VocabList{Name: name, Slug: slug, Language: "en", Total: len(wordModels)}
 		if err := s.repo.UpsertVocabList(ctx, list); err != nil {
 			slog.Warn("learning: failed to upsert list", "slug", slug, "err", err)
 			continue
 		}
 
-		// Get list ID
+		// Re-fetch to get the assigned ID
 		allLists, _ := s.repo.GetAllVocabLists(ctx)
 		var listID uint
 		for _, l := range allLists {
@@ -309,26 +331,70 @@ func (s *LearningService) ImportVocabLists(ctx context.Context, dir string) erro
 				break
 			}
 		}
-
-		// Replace words
-		if listID > 0 {
-			if err := s.repo.DeleteVocabWordsByListID(ctx, listID); err != nil {
-				slog.Warn("learning: failed to delete old words", "slug", slug, "err", err)
-				continue
-			}
-			for i := range wordModels {
-				wordModels[i].ListID = listID
-			}
-			if err := s.repo.BatchUpsertVocabWords(ctx, wordModels); err != nil {
-				slog.Warn("learning: failed to insert words", "slug", slug, "err", err)
-				continue
-			}
+		if listID == 0 {
+			slog.Warn("learning: failed to get list ID after upsert", "slug", slug)
+			continue
 		}
 
-		slog.Info("learning: imported vocab list", "slug", slug, "count", len(wordModels))
+		for i := range wordModels {
+			wordModels[i].ListID = listID
+		}
+		if err := s.repo.BatchUpsertVocabWords(ctx, wordModels); err != nil {
+			slog.Warn("learning: failed to insert words", "slug", slug, "err", err)
+			continue
+		}
+
+		slog.Info("learning: imported new vocab list", "slug", slug, "count", len(wordModels), "sample_words", sampleWords(wordModels))
 	}
 
 	return s.Reload(ctx)
+}
+
+// parseVocabFile reads a .txt file and extracts words (one per line).
+// Words are parsed as everything before the first space, '[', or tab.
+func parseVocabFile(filePath, slug string) ([]*models.VocabWord, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n")
+	slog.Info("learning: file read", "slug", slug, "total_lines", len(lines))
+	var wordModels []*models.VocabWord
+	for idx, line := range lines {
+		raw := strings.TrimSpace(line)
+		if raw == "" {
+			continue
+		}
+		end := len(raw)
+		for i, c := range raw {
+			if c == ' ' || c == '[' || c == '\t' {
+				end = i
+				break
+			}
+		}
+		word := strings.ToLower(raw[:end])
+		if word == "" {
+			continue
+		}
+		if idx < 5 {
+			slog.Info("learning: parsed line", "idx", idx, "raw", raw, "word", word)
+		}
+		wordModels = append(wordModels, &models.VocabWord{Word: word})
+	}
+	return wordModels, nil
+}
+
+func sampleWords(words []*models.VocabWord) []string {
+	n := 10
+	if len(words) < n {
+		n = len(words)
+	}
+	res := make([]string, n)
+	for i := 0; i < n; i++ {
+		res[i] = words[i].Word
+	}
+	return res
 }
 
 // Reload reloads all vocab lists and words from MySQL into memory.

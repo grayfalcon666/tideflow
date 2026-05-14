@@ -22,6 +22,8 @@ type RawVideoItem = {
   is_liked: boolean
   is_big_v?: boolean
   tags?: string[]
+  wordbank_status?: string
+  subtitle_status?: string
 }
 
 const normalizeVideos = (items: RawVideoItem[]): any[] =>
@@ -47,6 +49,8 @@ const normalizeVideos = (items: RawVideoItem[]): any[] =>
       is_big_v: v.is_big_v ?? false,
     },
     tags: v.tags,
+    wordbank_status: v.wordbank_status,
+    subtitle_status: v.subtitle_status,
   }))
 
 const activeWindow = ref<WindowOption>('1h')

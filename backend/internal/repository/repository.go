@@ -733,3 +733,8 @@ func (r *Repository) BatchUpsertVocabWords(ctx context.Context, words []*models.
 func (r *Repository) DeleteVocabWordsByListID(ctx context.Context, listID uint) error {
 	return r.db.WithContext(ctx).Where("list_id = ?", listID).Delete(&models.VocabWord{}).Error
 }
+
+// DeleteVocabList deletes a vocab list by ID.
+func (r *Repository) DeleteVocabList(ctx context.Context, listID uint) error {
+	return r.db.WithContext(ctx).Delete(&models.VocabList{}, listID).Error
+}
