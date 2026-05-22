@@ -7,10 +7,12 @@ const props = defineProps<{
   total: number
   correctCount: number
   wrongWords: LearnWord[]
+  hasMoreBatches: boolean
 }>()
 
 const emit = defineEmits<{
   retryWrong: [words: LearnWord[]]
+  continueNextBatch: []
   close: []
   openCaptions: [word: string]
 }>()
@@ -99,6 +101,14 @@ const dashOffset = computed(() => circumference * (1 - accuracy.value / 100))
 
     <!-- 操作按钮 -->
     <div class="actions">
+      <button
+        v-if="hasMoreBatches"
+        class="btn-next-batch"
+        @click="emit('continueNextBatch')"
+      >
+        <TFIcon name="arrow_forward" :size="16" />
+        继续学习下一批
+      </button>
       <button
         v-if="wrongWords.length > 0"
         class="btn-retry"
@@ -260,6 +270,27 @@ const dashOffset = computed(() => circumference * (1 - accuracy.value / 100))
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.btn-next-batch {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #1ed760;
+  color: #000;
+  border: none;
+  border-radius: 9999px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover { background: #1fd665; }
 }
 
 .btn-retry {

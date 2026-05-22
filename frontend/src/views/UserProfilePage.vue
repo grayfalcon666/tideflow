@@ -8,6 +8,7 @@ import TFIcon from '../components/common/TFIcon.vue'
 import UserVideoTab from '../components/user/UserVideoTab.vue'
 import UserLikedTab from '../components/user/UserLikedTab.vue'
 import UserSettingsTab from '../components/user/UserSettingsTab.vue'
+import UserHabitTab from '../components/user/UserHabitTab.vue'
 import * as userService from '../services/user'
 import type { UserProfile, VideoItem } from '../types'
 import { useAuthStore } from '../stores/auth'
@@ -30,7 +31,7 @@ const userId = computed(() => {
 })
 
 const profile = ref<UserProfile | null>(null)
-const activeTab = ref<'videos' | 'liked' | 'settings'>('videos')
+const activeTab = ref<'videos' | 'liked' | 'settings' | 'habit'>('videos')
 const loading = ref(true)
 
 const isMe = computed(() => authStore.accountId === userId.value)
@@ -100,6 +101,9 @@ onMounted(() => fetchProfile())
         <button v-if="isMe || profile.likes_public" class="tab-btn" :class="{ active: activeTab === 'liked' }" @click="activeTab = 'liked'">
           {{ isMe ? '我赞过的' : '赞过的' }}
         </button>
+        <button v-if="isMe" class="tab-btn" :class="{ active: activeTab === 'habit' }" @click="activeTab = 'habit'">
+          学习习惯
+        </button>
         <button v-if="isMe" class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
           设置
         </button>
@@ -107,6 +111,7 @@ onMounted(() => fetchProfile())
 
       <UserVideoTab v-if="activeTab === 'videos' && userId !== null" :userId="userId" />
       <UserLikedTab v-if="activeTab === 'liked'" :userId="userId ?? undefined" />
+      <UserHabitTab v-if="activeTab === 'habit'" />
       <UserSettingsTab v-if="activeTab === 'settings'" />
     </template>
   </div>

@@ -109,6 +109,30 @@ export interface Caption {
   content: string
 }
 
+export interface CommitLearningReq {
+  video_id: number
+  words_practiced: WordStatus[]
+  is_retry?: boolean
+}
+
+export interface WordStatus {
+  word: string
+  status: number
+}
+
+export interface HabitStatsResp {
+  heatmap: DailyHeatmapEntry[]
+  total_days: number
+  current_streak: number
+  today_words: number
+  today_videos: number
+}
+
+export interface DailyHeatmapEntry {
+  date: string
+  words_count: number
+}
+
 // ============ Video (extend) ============
 export interface VideoDetail extends VideoItem {
   is_following_author: boolean

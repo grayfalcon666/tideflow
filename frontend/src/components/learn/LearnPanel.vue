@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, provide, computed } from 'vue'
-import type { LearnWord, VocabList } from '../../types'
+import { ref, computed } from 'vue'
+import type { LearnWord, VocabList, WordStatus } from '../../types'
+import * as learnService from '../../services/learn'
+import { useLearnSettings } from '../../composables/useLearnSettings'
 import LearnStepSelectList from './LearnStepSelectList.vue'
 import LearnStepWordList from './LearnStepWordList.vue'
 import LearnStepSpelling from './LearnStepSpelling.vue'
@@ -25,6 +27,12 @@ const selectedList = ref<VocabList | null>(null)
 const spellingWords = ref<LearnWord[]>([])
 const resultCorrectCount = ref(0)
 const resultWrongWords = ref<LearnWord[]>([])
+
+// 分批次学习进度
+const learnedCount = ref(0)
+const unmasteredTotal = ref(0)
+const isRetryBatch = ref(false)
+const { chunkSize } = useLearnSettings()
 
 // 语境抽屉
 const showCaptionDrawer = ref(false)
@@ -77,18 +85,51 @@ const handleListSelect = (list: VocabList) => {
 }
 
 // 开始学习
-const handleStartLearning = (words: LearnWord[]) => {
+const handleStartLearning = (words: LearnWord[], _learnedCount: number, _unmasteredTotal: number) => {
   spellingWords.value = words
+  learnedCount.value = _learnedCount
+  unmasteredTotal.value = _unmasteredTotal
   resultCorrectCount.value = 0
   resultWrongWords.value = []
   step.value = 'spelling'
 }
 
-// 完成拼写
-const handleSpellingDone = (correctIds: string[], wrongWords: LearnWord[]) => {
+// 是否还有更多批次
+const hasMoreBatches = computed(() => {
+  return learnedCount.value + spellingWords.value.length < unmasteredTotal.value
+})
+
+// 完成拼写 → 提交学习结果
+const handleSpellingDone = async (correctIds: string[], wrongWords: LearnWord[]) => {
   resultCorrectCount.value = correctIds.length
   resultWrongWords.value = wrongWords
+
+  // 构建提交数据
+  const wordsPracticed: WordStatus[] = []
+  for (const w of spellingWords.value) {
+    wordsPracticed.push({
+      word: w.value,
+      status: wrongWords.find(ww => ww.value === w.value) ? 0 : 1,
+    })
+  }
+
+  try {
+    await learnService.commitLearning({
+      video_id: props.videoId,
+      words_practiced: wordsPracticed,
+      is_retry: isRetryBatch.value,
+    })
+  } catch { /* 静默失败，不影响展示结果 */ }
+  isRetryBatch.value = false
+
   step.value = 'result'
+}
+
+// 继续下一批
+const handleContinueNextBatch = () => {
+  if (!selectedList.value) return
+  // 回到预览，重新加载下一批
+  step.value = 'preview'
 }
 
 // 重练错词
@@ -96,6 +137,7 @@ const handleRetryWrong = (words: LearnWord[]) => {
   spellingWords.value = words
   resultCorrectCount.value = 0
   resultWrongWords.value = []
+  isRetryBatch.value = true
   step.value = 'spelling'
 }
 
@@ -151,6 +193,7 @@ const panelTitle = computed(() => {
           v-else-if="step === 'preview' && selectedList"
           :videoId="videoId"
           :list="selectedList"
+          :chunkSize="chunkSize"
           @start="handleStartLearning"
           @openCaptions="handleOpenCaptions"
         />
@@ -167,7 +210,9 @@ const panelTitle = computed(() => {
           :total="spellingWords.length"
           :correctCount="resultCorrectCount"
           :wrongWords="resultWrongWords"
+          :hasMoreBatches="hasMoreBatches"
           @retryWrong="handleRetryWrong"
+          @continueNextBatch="handleContinueNextBatch"
           @close="closePanel"
           @openCaptions="handleOpenCaptions"
         />

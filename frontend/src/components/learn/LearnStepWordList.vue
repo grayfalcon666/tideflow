@@ -7,24 +7,32 @@ import TFIcon from '../common/TFIcon.vue'
 const props = defineProps<{
   videoId: number
   list: VocabList
+  chunkSize?: number
 }>()
 
 const emit = defineEmits<{
-  start: [words: LearnWord[]]
+  start: [words: LearnWord[], learnedCount: number, unmasteredTotal: number]
   openCaptions: [word: string]
 }>()
 
 const words = ref<LearnWord[]>([])
+const learnedCount = ref(0)
+const unmasteredTotal = ref(0)
 const loading = ref(true)
 const error = ref('')
 const hasStarted = ref(false)
+const showPrompt = ref(false)
 
 const load = async () => {
   loading.value = true
   error.value = ''
   try {
-    const resp = await learnService.getVideoLearnWords(props.videoId, props.list.id)
-    words.value = resp.data.data?.words ?? []
+    const resp = await learnService.getVideoLearnWords(props.videoId, props.list.id, props.chunkSize ?? 15)
+    const data = resp.data.data
+    words.value = data?.words ?? []
+    learnedCount.value = data?.learned_count ?? 0
+    unmasteredTotal.value = data?.unmastered_total ?? 0
+    showPrompt.value = learnedCount.value > 0
   } catch (e: any) {
     if (e?.response?.status === 412) {
       error.value = '词库尚未生成'
@@ -36,11 +44,27 @@ const load = async () => {
   }
 }
 
+const handleContinue = () => {
+  showPrompt.value = false
+}
+
+const handleRestart = async () => {
+  try {
+    await learnService.resetProgress(props.videoId, props.list.id)
+  } catch { /* ignore */ }
+  await load()
+  showPrompt.value = false
+}
+
+const hasMoreBatches = computed(() => {
+  return learnedCount.value + words.value.length < unmasteredTotal.value
+})
+
 load()
 
 const handleStart = () => {
   hasStarted.value = true
-  emit('start', words.value)
+  emit('start', words.value, learnedCount.value, unmasteredTotal.value)
 }
 
 const formatTime = (t: string) => {
@@ -69,9 +93,30 @@ const formatTime = (t: string) => {
     </div>
 
     <template v-else>
+      <!-- 继续/重头学 选择 -->
+      <div v-if="showPrompt" class="continue-prompt">
+        <TFIcon name="school" :size="32" color="#1ed760" />
+        <p class="prompt-title">你已学习过该词表</p>
+        <p class="prompt-desc">已掌握 <strong>{{ learnedCount }}</strong> / {{ unmasteredTotal }} 个单词</p>
+        <div class="prompt-actions">
+          <button class="btn-continue" @click="handleContinue">
+            <TFIcon name="play_arrow" :size="16" />
+            继续学习
+          </button>
+          <button class="btn-restart" @click="handleRestart">
+            <TFIcon name="replay" :size="16" />
+            重头学
+          </button>
+        </div>
+      </div>
+
+      <template v-else>
       <div class="word-summary">
         <span class="total-count">{{ words.length }}</span>
-        <span class="total-label">个匹配单词</span>
+        <span class="total-label">个待学单词</span>
+        <span v-if="unmasteredTotal > 0" class="progress-info">
+          （已掌握 {{ learnedCount }} / {{ unmasteredTotal }}）
+        </span>
       </div>
 
       <div v-if="words.length === 0" class="state-empty">
@@ -106,6 +151,7 @@ const formatTime = (t: string) => {
           开始学习
         </button>
       </div>
+      </template>
     </template>
   </div>
 </template>
@@ -265,5 +311,78 @@ const formatTime = (t: string) => {
 
   &:hover { background: #1fd665; }
   &:active { transform: scale(0.98); }
+}
+
+.progress-info {
+  font-size: 12px;
+  color: #888;
+  margin-left: 8px;
+}
+
+.continue-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 36px 24px;
+  text-align: center;
+}
+
+.prompt-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.prompt-desc {
+  margin: 0;
+  font-size: 14px;
+  color: #b3b3b3;
+
+  strong {
+    color: #1ed760;
+    font-weight: 700;
+  }
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.btn-continue {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1ed760;
+  color: #000;
+  border: none;
+  border-radius: 9999px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover { background: #1fd665; }
+}
+
+.btn-restart {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: #b3b3b3;
+  border: 1px solid #444;
+  border-radius: 9999px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover { background: #1f1f1f; color: #fff; }
 }
 </style>
