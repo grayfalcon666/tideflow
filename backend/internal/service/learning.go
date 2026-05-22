@@ -9,7 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"gorm.io/gorm"
+
+	infraredis "tideflow/infra/redis"
 	"tideflow/internal/models"
 	"tideflow/internal/repository"
 )
@@ -24,9 +28,50 @@ var (
 
 // LearningWordsResponse is the response for GET /learn/words.
 type LearningWordsResponse struct {
-	ListName string           `json:"list_name"`
-	Total    int              `json:"total"`
-	Words    []*LearningWord  `json:"words"`
+	ListName        string          `json:"list_name"`
+	Total           int             `json:"total"`
+	LearnedCount    int             `json:"learned_count"`
+	UnmasteredTotal int             `json:"unmastered_total"`
+	Words           []*LearningWord `json:"words"`
+}
+
+// WordStatus represents a word practice result.
+type WordStatus struct {
+	Word   string `json:"word"`
+	Status int8   `json:"status"`
+}
+
+// CommitLearningReq is the request body for POST /learn/commit.
+type CommitLearningReq struct {
+	VideoID        uint         `json:"video_id"`
+	WordsPracticed []WordStatus `json:"words_practiced"`
+	IsRetry        bool         `json:"is_retry"`
+}
+
+// ResetProgressReq is the request body for POST /learn/progress/reset.
+type ResetProgressReq struct {
+	VideoID uint `json:"video_id"`
+}
+
+// HabitStatsResp is the response for GET /learn/habit/stats.
+type HabitStatsResp struct {
+	Heatmap       []DailyHeatmapEntry `json:"heatmap"`
+	TotalDays     int                 `json:"total_days"`
+	CurrentStreak int                 `json:"current_streak"`
+	TodayWords    int                 `json:"today_words"`
+	TodayVideos   int                 `json:"today_videos"`
+}
+
+// DailyHeatmapEntry is a single day entry in the heatmap.
+type DailyHeatmapEntry struct {
+	Date       string `json:"date"`
+	WordsCount int    `json:"words_count"`
+}
+
+// TodayWordItem represents a word practiced today.
+type TodayWordItem struct {
+	Word   string `json:"word"`
+	Status int8   `json:"status"`
 }
 
 // LearningWord is a single word entry in the learning list.
@@ -68,16 +113,18 @@ type wordEntry struct {
 type LearningService struct {
 	repo     *repository.Repository
 	wbSvc    *WordbankService
+	cache    *infraredis.Cache
 	lists    map[uint]*models.VocabList
 	wordSets map[uint]map[string]struct{}
 	mu       sync.RWMutex
 }
 
 // NewLearningService creates a learning service. Call Init() after construction.
-func NewLearningService(repo *repository.Repository, wbSvc *WordbankService) *LearningService {
+func NewLearningService(repo *repository.Repository, wbSvc *WordbankService, cache *infraredis.Cache) *LearningService {
 	return &LearningService{
 		repo:     repo,
 		wbSvc:    wbSvc,
+		cache:    cache,
 		lists:    make(map[uint]*models.VocabList),
 		wordSets: make(map[uint]map[string]struct{}),
 	}
@@ -148,7 +195,9 @@ func (s *LearningService) GetLists() ([]*models.VocabList, error) {
 }
 
 // GetLearningWords computes the intersection of a video's wordbank with a vocab list.
-func (s *LearningService) GetLearningWords(ctx context.Context, videoID, listID uint) (*LearningWordsResponse, error) {
+// If accountID > 0, filters out mastered words and applies chunk slicing based on video progress.
+// chunkSize <= 0 means return all words without slicing.
+func (s *LearningService) GetLearningWords(ctx context.Context, videoID, listID, accountID uint, chunkSize int) (*LearningWordsResponse, error) {
 	s.mu.RLock()
 	wordSet, listOK := s.wordSets[listID]
 	listMeta, metaOK := s.lists[listID]
@@ -202,10 +251,70 @@ func (s *LearningService) GetLearningWords(ctx context.Context, videoID, listID 
 		})
 	}
 
+	// User-specific filtering and chunk slicing
+	var learnedCount int
+	unmastered := matchWords
+	if accountID > 0 {
+		// Load progress cursor
+		progress, err := s.repo.GetUserVideoProgress(ctx, accountID, videoID)
+		if err != nil {
+			slog.Warn("learning: failed to get video progress", "err", err)
+		}
+		if progress != nil {
+			learnedCount = progress.LearnedCount
+		}
+
+		// Filter: exclude words that are still within their review interval
+		wordList := make([]string, len(unmastered))
+		for i, w := range unmastered {
+			wordList[i] = strings.ToLower(w.Value)
+		}
+		userWords, err := s.repo.GetUserWordStatuses(ctx, accountID, wordList)
+		if err != nil {
+			slog.Warn("learning: failed to get user word statuses", "err", err)
+		} else {
+			inWindow := make(map[string]struct{})
+			for _, uw := range userWords {
+				if inReviewWindow(uw.Status, uw.UpdatedAt) {
+					inWindow[uw.Word] = struct{}{}
+				}
+			}
+			var filtered []*LearningWord
+			for _, w := range unmastered {
+				if _, skip := inWindow[strings.ToLower(w.Value)]; !skip {
+					filtered = append(filtered, w)
+				}
+			}
+			unmastered = filtered
+		}
+
+		// Cursor overflow defense
+		if learnedCount >= len(unmastered) {
+			return &LearningWordsResponse{
+				ListName:        listMeta.Name,
+				Total:           len(matchWords),
+				LearnedCount:    learnedCount,
+				UnmasteredTotal: len(unmastered),
+				Words:           nil,
+			}, nil
+		}
+
+		// Dynamic chunk slicing
+		if chunkSize > 0 {
+			end := learnedCount + chunkSize
+			if end > len(unmastered) {
+				end = len(unmastered)
+			}
+			unmastered = unmastered[learnedCount:end]
+		}
+	}
+
 	resp := &LearningWordsResponse{
-		ListName: listMeta.Name,
-		Total:    len(matchWords),
-		Words:    matchWords,
+		ListName:        listMeta.Name,
+		Total:           len(matchWords),
+		LearnedCount:    learnedCount,
+		UnmasteredTotal: len(unmastered),
+		Words:           unmastered,
 	}
 
 	slog.Info("learning: 词表交集计算完成",
@@ -214,6 +323,8 @@ func (s *LearningService) GetLearningWords(ctx context.Context, videoID, listID 
 		"wordbank_size", len(rawWords),
 		"vocab_size", len(wordSet),
 		"matched", len(matchWords),
+		"learned_count", learnedCount,
+		"unmastered_total", len(unmastered),
 	)
 	return resp, nil
 }
@@ -383,6 +494,183 @@ func parseVocabFile(filePath, slug string) ([]*models.VocabWord, error) {
 		wordModels = append(wordModels, &models.VocabWord{Word: word})
 	}
 	return wordModels, nil
+}
+
+// CommitLearning processes a learning session submission.
+// Updates video progress, user word statuses, daily learning rollup, and habit bitmap.
+func (s *LearningService) CommitLearning(ctx context.Context, accountID uint, req CommitLearningReq) error {
+	db := s.repo.DB()
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		delta := len(req.WordsPracticed)
+
+		// 1. Upsert video progress (skip for retry — cursor already advanced)
+		if !req.IsRetry {
+			if err := tx.Exec(
+				`INSERT INTO user_video_progress (account_id, video_id, learned_count, updated_at)
+				 VALUES (?, ?, ?, NOW())
+				 ON DUPLICATE KEY UPDATE learned_count = learned_count + ?, updated_at = NOW()`,
+				accountID, req.VideoID, delta, delta,
+			).Error; err != nil {
+				return err
+			}
+		}
+
+		// 2. Batch upsert user words (always apply — star changes take effect)
+		for _, w := range req.WordsPracticed {
+			if err := tx.Exec(
+				`INSERT INTO user_words (account_id, word, status, updated_at) VALUES (?, ?, ?, NOW())
+				 ON DUPLICATE KEY UPDATE
+				   status = IF(VALUES(status) = 0, 0, LEAST(status + 1, 4)),
+				   updated_at = NOW()`,
+				accountID, strings.ToLower(w.Word), w.Status,
+			).Error; err != nil {
+				return err
+			}
+		}
+
+		// 3. Upsert daily learning rollup (skip for retry — don't double count)
+		if !req.IsRetry {
+			if err := tx.Exec(
+				`INSERT INTO user_daily_learnings (account_id, date, words_count, videos_count, updated_at)
+				 VALUES (?, ?, ?, 1, NOW())
+				 ON DUPLICATE KEY UPDATE words_count = words_count + ?, updated_at = NOW()`,
+				accountID, today, delta,
+			).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// 4. Set habit bitmap (after transaction commit)
+	habitKey := infraredis.UserHabit(now.Year(), accountID)
+	s.cache.SetHabitBitmap(ctx, habitKey, now.YearDay())
+
+	// 5. Invalidate today's words cache
+	if !req.IsRetry {
+		s.cache.InvalidateTodayWords(ctx, infraredis.UserTodayWords(accountID))
+	}
+
+	slog.Info("learning: commit learning",
+		"account_id", accountID,
+		"video_id", req.VideoID,
+		"words_count", len(req.WordsPracticed),
+	)
+	return nil
+}
+
+// GetHabitStats returns learning habit statistics for a user in a given year.
+func (s *LearningService) GetHabitStats(ctx context.Context, accountID uint, year int) (*HabitStatsResp, error) {
+	if year == 0 {
+		year = time.Now().Year()
+	}
+
+	// 1. Get daily learning records from MySQL
+	records, err := s.repo.GetUserDailyLearnings(ctx, accountID, year)
+	if err != nil {
+		return nil, err
+	}
+
+	heatmap := make([]DailyHeatmapEntry, 0, len(records))
+	for _, r := range records {
+		heatmap = append(heatmap, DailyHeatmapEntry{
+			Date:       r.Date.Format("2006-01-02"),
+			WordsCount: r.WordsCount,
+		})
+	}
+
+	// 2. Get bitmap stats from Redis
+	habitKey := infraredis.UserHabit(year, accountID)
+	totalDays, currentStreak := s.cache.GetHabitStats(ctx, habitKey)
+
+	// 3. Find today's stats from heatmap
+	todayStr := time.Now().Format("2006-01-02")
+	var todayWords, todayVideos int
+	for _, r := range records {
+		if r.Date.Format("2006-01-02") == todayStr {
+			todayWords = r.WordsCount
+			todayVideos = r.VideosCount
+			break
+		}
+	}
+
+	return &HabitStatsResp{
+		Heatmap:       heatmap,
+		TotalDays:     totalDays,
+		CurrentStreak: currentStreak,
+		TodayWords:    todayWords,
+		TodayVideos:   todayVideos,
+	}, nil
+}
+
+// GetTodayWords returns all words the user practiced today, with Redis-first cache.
+func (s *LearningService) GetTodayWords(ctx context.Context, accountID uint) ([]TodayWordItem, error) {
+	key := infraredis.UserTodayWords(accountID)
+
+	// 1. Try Redis
+	if cached, err := s.cache.GetTodayWords(ctx, key); err == nil && cached != "" {
+		var items []TodayWordItem
+		if err := json.Unmarshal([]byte(cached), &items); err == nil {
+			return items, nil
+		}
+	}
+
+	// 2. Fallback to MySQL
+	records, err := s.repo.GetUserWordsToday(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]TodayWordItem, 0, len(records))
+	for _, r := range records {
+		items = append(items, TodayWordItem{Word: r.Word, Status: r.Status})
+	}
+
+	// 3. Write back to Redis
+	if data, err := json.Marshal(items); err == nil {
+		s.cache.SetTodayWords(ctx, key, string(data))
+	}
+
+	return items, nil
+}
+
+// reviewInterval returns the no-repeat window for a given star level.
+func reviewInterval(status int8) time.Duration {
+	switch status {
+	case 1:
+		return 12 * time.Hour
+	case 2:
+		return 3 * 24 * time.Hour
+	case 3:
+		return 7 * 24 * time.Hour
+	case 4:
+		return 30 * 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
+// inReviewWindow returns true if the word is still within its review interval
+// and should be excluded from the learning list.
+func inReviewWindow(status int8, updatedAt time.Time) bool {
+	if status == 0 {
+		return false
+	}
+	return time.Since(updatedAt) < reviewInterval(status)
+}
+
+// ResetProgress resets the video learning cursor for a user.
+func (s *LearningService) ResetProgress(ctx context.Context, accountID, videoID uint) error {
+	return s.repo.DB().WithContext(ctx).
+		Exec("DELETE FROM user_video_progress WHERE account_id = ? AND video_id = ?", accountID, videoID).
+		Error
 }
 
 func sampleWords(words []*models.VocabWord) []string {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"tideflow/internal/middleware"
 	"tideflow/internal/service"
 	"tideflow/pkg/response"
 )
@@ -64,8 +65,11 @@ func (h *LearningHandler) GetLearningWords(c *gin.Context) {
 		return
 	}
 
-	slog.Info("GET /learn/words", "video_id", videoID, "list_id", listID)
-	resp, err := h.svc.GetLearningWords(c.Request.Context(), uint(videoID), uint(listID))
+	chunkSize, _ := strconv.Atoi(c.DefaultQuery("chunk_size", "0"))
+	accountID := middleware.GetUserID(c)
+
+	slog.Info("GET /learn/words", "video_id", videoID, "list_id", listID, "chunk_size", chunkSize)
+	resp, err := h.svc.GetLearningWords(c.Request.Context(), uint(videoID), uint(listID), accountID, chunkSize)
 	if err != nil {
 		if errors.Is(err, service.ErrWordbankNotReady) {
 			c.JSON(http.StatusPreconditionFailed, gin.H{
@@ -124,4 +128,121 @@ func (h *LearningHandler) GetWordCaptions(c *gin.Context) {
 	}
 
 	response.Success(c, resp)
+}
+
+// @Summary 提交学习会话
+// @Description 提交一批单词的学习结果，更新视频游标、全局词汇状态和每日流水
+// @Tags 学习
+// @Security OAuth2Password
+// @Produce json
+// @Param body body service.CommitLearningReq true "学习提交数据"
+// @Success 200 {object} response.Response
+// @Router /api/v1/learn/commit [post]
+func (h *LearningHandler) CommitLearning(c *gin.Context) {
+	accountID := middleware.GetUserID(c)
+	if accountID == 0 {
+		response.Unauthorized(c)
+		return
+	}
+
+	var req service.CommitLearningReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request body")
+		return
+	}
+
+	if req.VideoID == 0 || len(req.WordsPracticed) == 0 {
+		response.BadRequest(c, "video_id and words_practiced are required")
+		return
+	}
+
+	if err := h.svc.CommitLearning(c.Request.Context(), accountID, req); err != nil {
+		response.InternalServerError(c, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{"message": "commit recorded"})
+}
+
+// @Summary 获取学习习惯统计
+// @Description 返回指定年份的热力图数据、打卡天数和连续打卡天数
+// @Tags 学习
+// @Security OAuth2Password
+// @Produce json
+// @Param year query int false "年份" default(当前年份)
+// @Success 200 {object} service.HabitStatsResp
+// @Router /api/v1/learn/habit/stats [get]
+func (h *LearningHandler) GetHabitStats(c *gin.Context) {
+	accountID := middleware.GetUserID(c)
+	if accountID == 0 {
+		response.Unauthorized(c)
+		return
+	}
+
+	year, _ := strconv.Atoi(c.DefaultQuery("year", "0"))
+
+	resp, err := h.svc.GetHabitStats(c.Request.Context(), accountID, year)
+	if err != nil {
+		response.InternalServerError(c, err.Error())
+		return
+	}
+
+	response.Success(c, resp)
+}
+
+// @Summary 重置视频学习进度
+// @Description 重置指定视频的学习游标为0，不删除全局单词状态
+// @Tags 学习
+// @Security OAuth2Password
+// @Produce json
+// @Param body body service.ResetProgressReq true "视频ID"
+// @Success 200 {object} response.Response
+// @Router /api/v1/learn/progress/reset [post]
+func (h *LearningHandler) ResetProgress(c *gin.Context) {
+	accountID := middleware.GetUserID(c)
+	if accountID == 0 {
+		response.Unauthorized(c)
+		return
+	}
+
+	var req service.ResetProgressReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request body")
+		return
+	}
+
+	if req.VideoID == 0 {
+		response.BadRequest(c, "video_id is required")
+		return
+	}
+
+	if err := h.svc.ResetProgress(c.Request.Context(), accountID, req.VideoID); err != nil {
+		response.InternalServerError(c, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{"message": "progress reset"})
+}
+
+// @Summary 获取今日学习的单词
+// @Description 返回用户今天学习的所有单词及其星级
+// @Tags 学习
+// @Security OAuth2Password
+// @Produce json
+// @Success 200 {object} response.Response
+// @Router /api/v1/learn/today/words [get]
+func (h *LearningHandler) GetTodayWords(c *gin.Context) {
+	accountID := middleware.GetUserID(c)
+	if accountID == 0 {
+		response.Unauthorized(c)
+		return
+	}
+
+	words, err := h.svc.GetTodayWords(c.Request.Context(), accountID)
+	if err != nil {
+		response.InternalServerError(c, err.Error())
+		return
+	}
+
+	response.Success(c, words)
 }

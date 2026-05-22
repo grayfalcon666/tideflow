@@ -83,7 +83,7 @@ func main() {
 	wordbankSvc := service.NewWordbankService(repo, cache)
 
 	// Scan vocab dir on startup: import new files, skip existing, delete removed
-	learningSvc := service.NewLearningService(repo, wordbankSvc)
+	learningSvc := service.NewLearningService(repo, wordbankSvc, cache)
 	if err := learningSvc.ImportVocabLists(context.Background(), cfg.VocabListsDir); err != nil {
 		log.Printf("warning: vocab import failed: %v", err)
 	}
@@ -255,6 +255,12 @@ func setupRouter(
 	r.GET("/api/v1/learn/lists", authMw.JWTAuth(), learningHandler.GetLists)
 	r.GET("/api/v1/videos/:id/learn/words", authMw.JWTAuth(), learningHandler.GetLearningWords)
 	r.GET("/api/v1/videos/:id/learn/word/:word/captions", authMw.JWTAuth(), learningHandler.GetWordCaptions)
+
+	// 学习追踪
+	r.POST("/api/v1/learn/commit", authMw.JWTAuth(), learningHandler.CommitLearning)
+	r.POST("/api/v1/learn/progress/reset", authMw.JWTAuth(), learningHandler.ResetProgress)
+	r.GET("/api/v1/learn/habit/stats", authMw.JWTAuth(), learningHandler.GetHabitStats)
+	r.GET("/api/v1/learn/today/words", authMw.JWTAuth(), learningHandler.GetTodayWords)
 
 	// 管理接口
 	r.POST("/api/v1/admin/vocab/import", authMw.JWTAuth(), adminVocabHandler.ImportVocabLists)

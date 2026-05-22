@@ -24,6 +24,7 @@ backend/*.test
 backend/*.out
 backend/tideflow-api
 backend/tideflow-worker
+backend/migrate
 
 #Python
 subtitle-worker/__pycache__
