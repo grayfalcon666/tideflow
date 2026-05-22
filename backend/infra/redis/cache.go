@@ -275,6 +275,57 @@ func (c *Cache) InvalidateVideoSubtitleAndWordbank(videoID uint) {
 }
 
 // ---------------------------------------------------------------
+// 学习习惯 — Bitmap 打卡
+// ---------------------------------------------------------------
+
+// SetHabitBitmap sets the habit bitmap for the given day of year.
+// The key expires at the end of the current year.
+func (c *Cache) SetHabitBitmap(ctx context.Context, key string, dayOfYear int) {
+	now := time.Now()
+	yearEnd := time.Date(now.Year()+1, 1, 1, 0, 0, 0, 0, time.UTC)
+	ttl := yearEnd.Sub(now) + 24*time.Hour // extra day buffer
+	c.rdb.SetBit(ctx, key, int64(dayOfYear-1), 1)
+	c.rdb.Expire(ctx, key, ttl)
+}
+
+// GetHabitStats returns total check-in days and current streak from the bitmap.
+func (c *Cache) GetHabitStats(ctx context.Context, key string) (totalDays int, currentStreak int) {
+	countCmd := c.rdb.BitCount(ctx, key, nil)
+	totalDays = int(countCmd.Val())
+
+	// Calculate current streak by scanning backward from today
+	today := time.Now()
+	dayOfYear := today.YearDay()
+	streak := 0
+	for d := dayOfYear; d >= 1; d-- {
+		bit, err := c.rdb.GetBit(ctx, key, int64(d-1)).Result()
+		if err != nil || bit != 1 {
+			break
+		}
+		streak++
+	}
+	return totalDays, streak
+}
+
+// GetTodayWords returns cached today's words from Redis.
+func (c *Cache) GetTodayWords(ctx context.Context, key string) (string, error) {
+	return c.rdb.Get(ctx, key).Result()
+}
+
+// SetTodayWords caches today's words with TTL until end of day.
+func (c *Cache) SetTodayWords(ctx context.Context, key string, data string) {
+	now := time.Now()
+	eod := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+	ttl := eod.Sub(now) + time.Minute
+	c.rdb.Set(ctx, key, data, ttl)
+}
+
+// InvalidateTodayWords removes the today's words cache entry.
+func (c *Cache) InvalidateTodayWords(ctx context.Context, key string) {
+	c.rdb.Del(ctx, key)
+}
+
+// ---------------------------------------------------------------
 // 冷拉取缓存重建
 // ---------------------------------------------------------------
 

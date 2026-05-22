@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -13,12 +14,13 @@ type Repository struct {
 	db *gorm.DB
 }
 
-func New(db *gorm.DB) *Repository {
-	return &Repository{db: db}
-}
-
+// DB returns the underlying GORM DB instance.
 func (r *Repository) DB() *gorm.DB {
 	return r.db
+}
+
+func New(db *gorm.DB) *Repository {
+	return &Repository{db: db}
 }
 
 func (r *Repository) CreateAccount(ctx context.Context, acc *models.Account) error {
@@ -737,4 +739,129 @@ func (r *Repository) DeleteVocabWordsByListID(ctx context.Context, listID uint) 
 // DeleteVocabList deletes a vocab list by ID.
 func (r *Repository) DeleteVocabList(ctx context.Context, listID uint) error {
 	return r.db.WithContext(ctx).Delete(&models.VocabList{}, listID).Error
+}
+
+// =================================================================
+// UserWord — 用户词汇本
+// =================================================================
+
+// UpsertUserWord inserts or updates a single word status for a user.
+func (r *Repository) UpsertUserWord(ctx context.Context, accountID uint, word string, status int8) error {
+	return r.db.WithContext(ctx).Exec(
+		`INSERT INTO user_words (account_id, word, status, updated_at) VALUES (?, ?, ?, NOW())
+		 ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = NOW()`,
+		accountID, word, status,
+	).Error
+}
+
+// BatchUpsertUserWords bulk-upserts user word statuses within a transaction.
+func (r *Repository) BatchUpsertUserWords(ctx context.Context, accountID uint, words []models.UserWord) error {
+	if len(words) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i := range words {
+			words[i].AccountID = accountID
+		}
+		return tx.CreateInBatches(words, 200).Error
+	})
+}
+
+// UserWordStatus is a lightweight projection of user_words for review-interval filtering.
+type UserWordStatus struct {
+	Word      string
+	Status    int8
+	UpdatedAt time.Time
+}
+
+// GetUserWordStatuses returns all user word records with status>0 that are in the given word list.
+// The caller (service layer) decides which words are within the review window.
+func (r *Repository) GetUserWordStatuses(ctx context.Context, accountID uint, words []string) ([]UserWordStatus, error) {
+	if len(words) == 0 {
+		return nil, nil
+	}
+	var results []UserWordStatus
+	err := r.db.WithContext(ctx).
+		Model(&models.UserWord{}).
+		Select("word, status, updated_at").
+		Where("account_id = ? AND status > 0 AND word IN (?)", accountID, words).
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// GetUserWordsToday returns all user words practiced today.
+func (r *Repository) GetUserWordsToday(ctx context.Context, accountID uint) ([]UserWordStatus, error) {
+	var results []UserWordStatus
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	err := r.db.WithContext(ctx).
+		Model(&models.UserWord{}).
+		Select("word, status, updated_at").
+		Where("account_id = ? AND updated_at >= ?", accountID, today).
+		Order("updated_at DESC").
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// =================================================================
+// UserVideoProgress — 视频学习游标
+// =================================================================
+
+// UpsertUserVideoProgress increments the learned_count for a user's video progress.
+func (r *Repository) UpsertUserVideoProgress(ctx context.Context, accountID, videoID uint, delta int) error {
+	return r.db.WithContext(ctx).Exec(
+		`INSERT INTO user_video_progress (account_id, video_id, learned_count, updated_at)
+		 VALUES (?, ?, ?, NOW())
+		 ON DUPLICATE KEY UPDATE learned_count = learned_count + ?, updated_at = NOW()`,
+		accountID, videoID, delta, delta,
+	).Error
+}
+
+// GetUserVideoProgress returns the progress record for a user on a specific video.
+func (r *Repository) GetUserVideoProgress(ctx context.Context, accountID, videoID uint) (*models.UserVideoProgress, error) {
+	var progress models.UserVideoProgress
+	err := r.db.WithContext(ctx).
+		Where("account_id = ? AND video_id = ?", accountID, videoID).
+		First(&progress).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &progress, nil
+}
+
+// =================================================================
+// UserDailyLearning — 每日学习流水
+// =================================================================
+
+// UpsertUserDailyLearning upserts the daily learning rollup for a user.
+func (r *Repository) UpsertUserDailyLearning(ctx context.Context, accountID uint, date time.Time, wordsDelta, videosDelta int) error {
+	return r.db.WithContext(ctx).Exec(
+		`INSERT INTO user_daily_learnings (account_id, date, words_count, videos_count, updated_at)
+		 VALUES (?, ?, ?, ?, NOW())
+		 ON DUPLICATE KEY UPDATE words_count = words_count + ?, videos_count = videos_count + ?, updated_at = NOW()`,
+		accountID, date, wordsDelta, videosDelta, wordsDelta, videosDelta,
+	).Error
+}
+
+// GetUserDailyLearnings returns all daily learning records for a user in a given year.
+func (r *Repository) GetUserDailyLearnings(ctx context.Context, accountID uint, year int) ([]*models.UserDailyLearning, error) {
+	var records []*models.UserDailyLearning
+	startDate := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(year+1, 1, 1, 0, 0, 0, 0, time.UTC)
+	err := r.db.WithContext(ctx).
+		Where("account_id = ? AND date >= ? AND date < ?", accountID, startDate, endDate).
+		Order("date ASC").
+		Find(&records).Error
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
 }

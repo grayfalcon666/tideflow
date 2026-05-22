@@ -221,3 +221,44 @@ type VocabWord struct {
 func (VocabWord) TableName() string {
 	return "vocab_words"
 }
+
+// UserWord records the mastery status of each word per user.
+// Composite primary key: (account_id, word).
+type UserWord struct {
+	AccountID uint      `gorm:"primaryKey;autoIncrement:false" json:"account_id"`
+	Word      string    `gorm:"primaryKey;size:100" json:"word"`
+	Status    int8      `gorm:"not null;default:0" json:"status"` // 0-4 star proficiency (0=unlearned/forgotten, 4=mastered)
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (UserWord) TableName() string {
+	return "user_words"
+}
+
+// UserVideoProgress tracks how many words the user has learned in a specific video.
+// This acts as the "cursor" (Offset) for dynamic chunk slicing.
+type UserVideoProgress struct {
+	AccountID    uint      `gorm:"primaryKey;autoIncrement:false" json:"account_id"`
+	VideoID      uint      `gorm:"primaryKey;autoIncrement:false" json:"video_id"`
+	LearnedCount int       `gorm:"not null;default:0" json:"learned_count"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func (UserVideoProgress) TableName() string {
+	return "user_video_progress"
+}
+
+// UserDailyLearning is a daily rollup of the user's learning activity.
+// Supports real-time UPSERT for heatmap data.
+type UserDailyLearning struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	AccountID   uint      `gorm:"uniqueIndex:idx_uid_date;not null" json:"account_id"`
+	Date        time.Time `gorm:"type:date;uniqueIndex:idx_uid_date;not null" json:"date"`
+	WordsCount  int       `gorm:"not null;default:0" json:"words_count"`
+	VideosCount int       `gorm:"not null;default:0" json:"videos_count"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (UserDailyLearning) TableName() string {
+	return "user_daily_learnings"
+}

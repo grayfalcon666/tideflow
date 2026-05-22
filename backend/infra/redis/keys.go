@@ -25,6 +25,8 @@ const (
 	KeyUploadChunks    = "upload:chunks:%s"
 	KeyVideoSubtitle   = "video:subtitle:%d"
 	KeyVideoWordbank   = "video:wordbank:%d"
+	KeyUserHabit       = "user:habit:%d:%d"     // year, accountID
+	KeyUserTodayWords  = "user:today_words:%d"   // accountID
 )
 
 func AccountToken(uid uint) string {
@@ -105,4 +107,12 @@ func VideoSubtitle(vid uint) string {
 
 func VideoWordbank(vid uint) string {
 	return fmt.Sprintf("%s:"+KeyVideoWordbank, Version, vid)
+}
+
+func UserHabit(year int, accountID uint) string {
+	return fmt.Sprintf("%s:"+KeyUserHabit, Version, year, accountID)
+}
+
+func UserTodayWords(accountID uint) string {
+	return fmt.Sprintf("%s:"+KeyUserTodayWords, Version, accountID)
 }
