@@ -809,35 +809,6 @@ func (r *Repository) GetUserWordsToday(ctx context.Context, accountID uint) ([]U
 }
 
 // =================================================================
-// UserVideoProgress — 视频学习游标
-// =================================================================
-
-// UpsertUserVideoProgress increments the learned_count for a user's video progress.
-func (r *Repository) UpsertUserVideoProgress(ctx context.Context, accountID, videoID uint, delta int) error {
-	return r.db.WithContext(ctx).Exec(
-		`INSERT INTO user_video_progress (account_id, video_id, learned_count, updated_at)
-		 VALUES (?, ?, ?, NOW())
-		 ON DUPLICATE KEY UPDATE learned_count = learned_count + ?, updated_at = NOW()`,
-		accountID, videoID, delta, delta,
-	).Error
-}
-
-// GetUserVideoProgress returns the progress record for a user on a specific video.
-func (r *Repository) GetUserVideoProgress(ctx context.Context, accountID, videoID uint) (*models.UserVideoProgress, error) {
-	var progress models.UserVideoProgress
-	err := r.db.WithContext(ctx).
-		Where("account_id = ? AND video_id = ?", accountID, videoID).
-		First(&progress).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &progress, nil
-}
-
-// =================================================================
 // UserDailyLearning — 每日学习流水
 // =================================================================
 
@@ -849,6 +820,38 @@ func (r *Repository) UpsertUserDailyLearning(ctx context.Context, accountID uint
 		 ON DUPLICATE KEY UPDATE words_count = words_count + ?, videos_count = videos_count + ?, updated_at = NOW()`,
 		accountID, date, wordsDelta, videosDelta, wordsDelta, videosDelta,
 	).Error
+}
+
+// GetUserDailyLearningByDate returns the daily learning record for a user on a specific date.
+func (r *Repository) GetUserDailyLearningByDate(ctx context.Context, accountID uint, date time.Time) (*models.UserDailyLearning, error) {
+	var record models.UserDailyLearning
+	err := r.db.WithContext(ctx).
+		Where("account_id = ? AND date = ?", accountID, date).
+		First(&record).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &record, nil
+}
+
+// GetUserWordStatusesAll returns all user word records (including status=0) for the given words.
+func (r *Repository) GetUserWordStatusesAll(ctx context.Context, accountID uint, words []string) ([]UserWordStatus, error) {
+	if len(words) == 0 {
+		return nil, nil
+	}
+	var results []UserWordStatus
+	err := r.db.WithContext(ctx).
+		Model(&models.UserWord{}).
+		Select("word, status, updated_at").
+		Where("account_id = ? AND word IN (?)", accountID, words).
+		Find(&results).Error
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 // GetUserDailyLearnings returns all daily learning records for a user in a given year.

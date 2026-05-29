@@ -27,6 +27,8 @@ const (
 	KeyVideoWordbank   = "video:wordbank:%d"
 	KeyUserHabit       = "user:habit:%d:%d"     // year, accountID
 	KeyUserTodayWords  = "user:today_words:%d"   // accountID
+	KeyUserQueue       = "user:queue:%d"         // accountID → List (word strings)
+	KeyUserBatch       = "user:batch:%d"         // accountID → Hash {video_id, list_id, mode, created_at}
 )
 
 func AccountToken(uid uint) string {
@@ -115,4 +117,12 @@ func UserHabit(year int, accountID uint) string {
 
 func UserTodayWords(accountID uint) string {
 	return fmt.Sprintf("%s:"+KeyUserTodayWords, Version, accountID)
+}
+
+func UserQueue(accountID uint) string {
+	return fmt.Sprintf("%s:"+KeyUserQueue, Version, accountID)
+}
+
+func UserBatch(accountID uint) string {
+	return fmt.Sprintf("%s:"+KeyUserBatch, Version, accountID)
 }

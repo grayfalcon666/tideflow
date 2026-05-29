@@ -16,6 +16,7 @@ type Account struct {
 	Bio           string         `gorm:"size:255" json:"bio"`
 	FollowerCount int            `gorm:"not null;default:0" json:"follower_count"`
 	LikesPublic   bool           `gorm:"not null;default:true" json:"likes_public"`
+	DailyGoal     int            `gorm:"not null;default:20" json:"daily_goal"` // 0=无限制
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
@@ -233,19 +234,6 @@ type UserWord struct {
 
 func (UserWord) TableName() string {
 	return "user_words"
-}
-
-// UserVideoProgress tracks how many words the user has learned in a specific video.
-// This acts as the "cursor" (Offset) for dynamic chunk slicing.
-type UserVideoProgress struct {
-	AccountID    uint      `gorm:"primaryKey;autoIncrement:false" json:"account_id"`
-	VideoID      uint      `gorm:"primaryKey;autoIncrement:false" json:"video_id"`
-	LearnedCount int       `gorm:"not null;default:0" json:"learned_count"`
-	UpdatedAt    time.Time `json:"updated_at"`
-}
-
-func (UserVideoProgress) TableName() string {
-	return "user_video_progress"
 }
 
 // UserDailyLearning is a daily rollup of the user's learning activity.

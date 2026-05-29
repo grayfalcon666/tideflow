@@ -258,7 +258,7 @@ func setupRouter(
 
 	// 学习追踪
 	r.POST("/api/v1/learn/commit", authMw.JWTAuth(), learningHandler.CommitLearning)
-	r.POST("/api/v1/learn/progress/reset", authMw.JWTAuth(), learningHandler.ResetProgress)
+	r.POST("/api/v1/learn/batch/abort", authMw.JWTAuth(), learningHandler.AbortBatch)
 	r.GET("/api/v1/learn/habit/stats", authMw.JWTAuth(), learningHandler.GetHabitStats)
 	r.GET("/api/v1/learn/today/words", authMw.JWTAuth(), learningHandler.GetTodayWords)
 

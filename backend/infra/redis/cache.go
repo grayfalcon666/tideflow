@@ -326,6 +326,73 @@ func (c *Cache) InvalidateTodayWords(ctx context.Context, key string) {
 }
 
 // ---------------------------------------------------------------
+// 学习队列 & 批次管理
+// ---------------------------------------------------------------
+
+const batchTTL = 24 * time.Hour
+
+// PushQueueHead pushes a word to the HEAD of the queue (for wrong answers → immediate retry).
+func (c *Cache) PushQueueHead(ctx context.Context, key, word string) {
+	c.rdb.LPush(ctx, key, word)
+}
+
+// PushQueueTail pushes multiple words to the TAIL of the queue (for batch construction).
+func (c *Cache) PushQueueTail(ctx context.Context, key string, words []string) {
+	if len(words) == 0 {
+		return
+	}
+	vals := make([]interface{}, len(words))
+	for i, w := range words {
+		vals[i] = w
+	}
+	c.rdb.RPush(ctx, key, vals...)
+}
+
+// PopQueueWord pops a word from the TAIL of the queue (FIFO: first in, first out).
+func (c *Cache) PopQueueWord(ctx context.Context, key string) (string, error) {
+	return c.rdb.RPop(ctx, key).Result()
+}
+
+// RemoveQueueWord removes a specific word from the queue (used before re-push on wrong).
+func (c *Cache) RemoveQueueWord(ctx context.Context, key, word string) int64 {
+	n, _ := c.rdb.LRem(ctx, key, 1, word).Result()
+	return n
+}
+
+// GetQueueLength returns the number of words remaining in the queue.
+func (c *Cache) GetQueueLength(ctx context.Context, key string) (int64, error) {
+	return c.rdb.LLen(ctx, key).Result()
+}
+
+// GetQueueWords returns all words currently in the queue (for response construction).
+func (c *Cache) GetQueueWords(ctx context.Context, key string) ([]string, error) {
+	return c.rdb.LRange(ctx, key, 0, -1).Result()
+}
+
+// SetBatchInfo stores batch metadata as a Redis Hash with 24h TTL.
+func (c *Cache) SetBatchInfo(ctx context.Context, key string, info map[string]interface{}) {
+	c.rdb.HSet(ctx, key, info)
+	c.rdb.Expire(ctx, key, batchTTL)
+}
+
+// GetBatchInfo returns all fields of the batch hash. Returns nil if key doesn't exist.
+func (c *Cache) GetBatchInfo(ctx context.Context, key string) (map[string]string, error) {
+	result, err := c.rdb.HGetAll(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, nil
+}
+
+// DeleteBatchAndQueue deletes both the batch hash and the queue list.
+func (c *Cache) DeleteBatchAndQueue(ctx context.Context, batchKey, queueKey string) {
+	c.rdb.Del(ctx, batchKey, queueKey)
+}
+
+// ---------------------------------------------------------------
 // 冷拉取缓存重建
 // ---------------------------------------------------------------
 

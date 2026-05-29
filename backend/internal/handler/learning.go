@@ -41,15 +41,18 @@ func (h *LearningHandler) GetLists(c *gin.Context) {
 	response.Success(c, lists)
 }
 
-// @Summary 获取视频中属于指定词表的单词
-// @Description 计算视频词库与指定考纲词表的交集，返回可用于学习的单词列表
+// @Summary 获取视频学习单词列表
+// @Description 计算视频词库与考纲词表交集，返回当前批次的待学单词
 // @Tags 学习
 // @Security OAuth2Password
 // @Produce json
 // @Param id path int true "视频ID"
 // @Param list_id query int true "词表ID"
-// @Success 200 {object} service.LearningWordsResponse
+// @Param chunk_size query int false "每批单词数" default(15)
+// @Param mode query string true "模式: spell 或 type"
+// @Success 200 {object} service.LearnWordsResp
 // @Failure 404 {object} response.Response
+// @Failure 409 {object} response.Response
 // @Failure 412 {object} response.Response
 // @Router /api/v1/videos/{id}/learn/words [get]
 func (h *LearningHandler) GetLearningWords(c *gin.Context) {
@@ -65,11 +68,24 @@ func (h *LearningHandler) GetLearningWords(c *gin.Context) {
 		return
 	}
 
-	chunkSize, _ := strconv.Atoi(c.DefaultQuery("chunk_size", "0"))
-	accountID := middleware.GetUserID(c)
+	chunkSize, _ := strconv.Atoi(c.DefaultQuery("chunk_size", "15"))
+	if chunkSize <= 0 {
+		chunkSize = 15
+	}
+	mode := c.DefaultQuery("mode", "spell")
+	if mode != "spell" && mode != "type" {
+		response.BadRequest(c, "mode must be 'spell' or 'type'")
+		return
+	}
 
-	slog.Info("GET /learn/words", "video_id", videoID, "list_id", listID, "chunk_size", chunkSize)
-	resp, err := h.svc.GetLearningWords(c.Request.Context(), uint(videoID), uint(listID), accountID, chunkSize)
+	accountID := middleware.GetUserID(c)
+	if accountID == 0 {
+		response.Unauthorized(c)
+		return
+	}
+
+	slog.Info("GET /learn/words", "video_id", videoID, "list_id", listID, "chunk_size", chunkSize, "mode", mode)
+	resp, err := h.svc.GetLearningWords(c.Request.Context(), uint(videoID), uint(listID), accountID, chunkSize, mode)
 	if err != nil {
 		if errors.Is(err, service.ErrWordbankNotReady) {
 			c.JSON(http.StatusPreconditionFailed, gin.H{
@@ -78,13 +94,17 @@ func (h *LearningHandler) GetLearningWords(c *gin.Context) {
 			})
 		} else if errors.Is(err, service.ErrListNotFound) {
 			response.NotFound(c, "vocab list not found")
+		} else if errors.Is(err, service.ErrBatchConflict) {
+			c.JSON(http.StatusConflict, gin.H{
+				"code":    409,
+				"message": "请先完成或放弃当前学习批次",
+			})
 		} else {
 			response.InternalServerError(c, err.Error())
 		}
 		return
 	}
 
-	slog.Info("GET /learn/words 完成", "video_id", videoID, "list_name", resp.ListName, "matched", resp.Total)
 	response.Success(c, resp)
 }
 
@@ -111,7 +131,6 @@ func (h *LearningHandler) GetWordCaptions(c *gin.Context) {
 		return
 	}
 
-	slog.Info("GET /learn/word/captions", "video_id", videoID, "word", word)
 	resp, err := h.svc.GetWordCaptions(c.Request.Context(), uint(videoID), word)
 	if err != nil {
 		if errors.Is(err, service.ErrWordbankNotReady) {
@@ -130,13 +149,14 @@ func (h *LearningHandler) GetWordCaptions(c *gin.Context) {
 	response.Success(c, resp)
 }
 
-// @Summary 提交学习会话
-// @Description 提交一批单词的学习结果，更新视频游标、全局词汇状态和每日流水
+// @Summary 提交单个单词拼写结果
+// @Description 提交一个单词的拼写结果（correct/wrong），更新星级和队列
 // @Tags 学习
 // @Security OAuth2Password
 // @Produce json
-// @Param body body service.CommitLearningReq true "学习提交数据"
-// @Success 200 {object} response.Response
+// @Param body body service.CommitReq true "单词提交数据"
+// @Success 200 {object} service.CommitResp
+// @Failure 409 {object} response.Response
 // @Router /api/v1/learn/commit [post]
 func (h *LearningHandler) CommitLearning(c *gin.Context) {
 	accountID := middleware.GetUserID(c)
@@ -145,23 +165,57 @@ func (h *LearningHandler) CommitLearning(c *gin.Context) {
 		return
 	}
 
-	var req service.CommitLearningReq
+	var req service.CommitReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request body")
 		return
 	}
 
-	if req.VideoID == 0 || len(req.WordsPracticed) == 0 {
-		response.BadRequest(c, "video_id and words_practiced are required")
+	if req.Word == "" {
+		response.BadRequest(c, "word is required")
+		return
+	}
+	if req.Result != "correct" && req.Result != "wrong" {
+		response.BadRequest(c, "result must be 'correct' or 'wrong'")
 		return
 	}
 
-	if err := h.svc.CommitLearning(c.Request.Context(), accountID, req); err != nil {
+	resp, err := h.svc.CommitLearning(c.Request.Context(), accountID, req)
+	if err != nil {
+		if errors.Is(err, service.ErrNoActiveBatch) {
+			c.JSON(http.StatusConflict, gin.H{
+				"code":    409,
+				"message": "no active learning batch",
+			})
+		} else {
+			response.InternalServerError(c, err.Error())
+		}
+		return
+	}
+
+	response.Success(c, resp)
+}
+
+// @Summary 放弃当前学习批次
+// @Description 删除当前活跃的学习队列和批次信息，已提交的单词状态不受影响
+// @Tags 学习
+// @Security OAuth2Password
+// @Produce json
+// @Success 200 {object} response.Response
+// @Router /api/v1/learn/batch/abort [post]
+func (h *LearningHandler) AbortBatch(c *gin.Context) {
+	accountID := middleware.GetUserID(c)
+	if accountID == 0 {
+		response.Unauthorized(c)
+		return
+	}
+
+	if err := h.svc.AbortBatch(c.Request.Context(), accountID); err != nil {
 		response.InternalServerError(c, err.Error())
 		return
 	}
 
-	response.Success(c, gin.H{"message": "commit recorded"})
+	response.Success(c, nil)
 }
 
 // @Summary 获取学习习惯统计
@@ -188,40 +242,6 @@ func (h *LearningHandler) GetHabitStats(c *gin.Context) {
 	}
 
 	response.Success(c, resp)
-}
-
-// @Summary 重置视频学习进度
-// @Description 重置指定视频的学习游标为0，不删除全局单词状态
-// @Tags 学习
-// @Security OAuth2Password
-// @Produce json
-// @Param body body service.ResetProgressReq true "视频ID"
-// @Success 200 {object} response.Response
-// @Router /api/v1/learn/progress/reset [post]
-func (h *LearningHandler) ResetProgress(c *gin.Context) {
-	accountID := middleware.GetUserID(c)
-	if accountID == 0 {
-		response.Unauthorized(c)
-		return
-	}
-
-	var req service.ResetProgressReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "invalid request body")
-		return
-	}
-
-	if req.VideoID == 0 {
-		response.BadRequest(c, "video_id is required")
-		return
-	}
-
-	if err := h.svc.ResetProgress(c.Request.Context(), accountID, req.VideoID); err != nil {
-		response.InternalServerError(c, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"message": "progress reset"})
 }
 
 // @Summary 获取今日学习的单词
