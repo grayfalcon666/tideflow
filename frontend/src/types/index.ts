@@ -110,15 +110,24 @@ export interface Caption {
 }
 
 export interface CommitLearningReq {
-  video_id: number
-  words_practiced: WordStatus[]
-  is_retry?: boolean
+  word: string
+  result: 'correct' | 'wrong'
 }
 
-export interface WordStatus {
-  word: string
-  status: number
+export interface CommitLearningResp {
+  new_status: number
+  daily_words_today: number
+  batch_remaining: number
 }
+
+export interface LearnWordsResp {
+  words: LearnWord[]
+  batch_total: number
+  batch_remaining: number
+  daily_remaining: number | null
+}
+
+export type LearnMode = 'spell' | 'type'
 
 export interface HabitStatsResp {
   heatmap: DailyHeatmapEntry[]

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { LearnWord, VocabList } from '../../types'
+import type { LearnWord, VocabList, LearnWordsResp, LearnMode } from '../../types'
 import * as learnService from '../../services/learn'
 import TFIcon from '../common/TFIcon.vue'
 
@@ -11,31 +11,36 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  start: [words: LearnWord[], learnedCount: number, unmasteredTotal: number]
+  start: [words: LearnWord[], batchResp: LearnWordsResp, mode: LearnMode]
   openCaptions: [word: string]
 }>()
 
 const words = ref<LearnWord[]>([])
-const learnedCount = ref(0)
-const unmasteredTotal = ref(0)
+const batchTotal = ref(0)
+const batchRemaining = ref(0)
+const dailyRemaining = ref<number | null>(null)
 const loading = ref(true)
 const error = ref('')
 const hasStarted = ref(false)
-const showPrompt = ref(false)
+const batchConflict = ref(false)
+const mode = ref<LearnMode>('spell')
 
 const load = async () => {
   loading.value = true
   error.value = ''
+  batchConflict.value = false
   try {
-    const resp = await learnService.getVideoLearnWords(props.videoId, props.list.id, props.chunkSize ?? 15)
+    const resp = await learnService.getVideoLearnWords(props.videoId, props.list.id, props.chunkSize ?? 15, mode.value)
     const data = resp.data.data
     words.value = data?.words ?? []
-    learnedCount.value = data?.learned_count ?? 0
-    unmasteredTotal.value = data?.unmastered_total ?? 0
-    showPrompt.value = learnedCount.value > 0
+    batchTotal.value = data?.batch_total ?? 0
+    batchRemaining.value = data?.batch_remaining ?? 0
+    dailyRemaining.value = data?.daily_remaining ?? null
   } catch (e: any) {
     if (e?.response?.status === 412) {
       error.value = '词库尚未生成'
+    } else if (e?.response?.status === 409) {
+      batchConflict.value = true
     } else {
       error.value = '加载单词失败'
     }
@@ -44,27 +49,31 @@ const load = async () => {
   }
 }
 
-const handleContinue = () => {
-  showPrompt.value = false
-}
-
-const handleRestart = async () => {
+const handleAbortBatch = async () => {
   try {
-    await learnService.resetProgress(props.videoId, props.list.id)
+    await learnService.abortBatch()
+    batchConflict.value = false
+    words.value = []
+    await load()
   } catch { /* ignore */ }
-  await load()
-  showPrompt.value = false
 }
 
-const hasMoreBatches = computed(() => {
-  return learnedCount.value + words.value.length < unmasteredTotal.value
-})
+const switchMode = async (m: LearnMode) => {
+  if (m === mode.value) return
+  mode.value = m
+  await load()
+}
 
 load()
 
 const handleStart = () => {
   hasStarted.value = true
-  emit('start', words.value, learnedCount.value, unmasteredTotal.value)
+  emit('start', words.value, {
+    words: words.value,
+    batch_total: batchTotal.value,
+    batch_remaining: batchRemaining.value,
+    daily_remaining: dailyRemaining.value,
+  }, mode.value)
 }
 
 const formatTime = (t: string) => {
@@ -83,8 +92,39 @@ const formatTime = (t: string) => {
       <span class="list-name">{{ list.name }}</span>
     </div>
 
+    <!-- Mode tabs -->
+    <div class="mode-tabs">
+      <button
+        class="mode-tab"
+        :class="{ active: mode === 'spell' }"
+        @click="switchMode('spell')"
+      >
+        <TFIcon name="edit" :size="14" />
+        默写模式
+      </button>
+      <button
+        class="mode-tab"
+        :class="{ active: mode === 'type' }"
+        @click="switchMode('type')"
+      >
+        <TFIcon name="keyboard" :size="14" />
+        跟打模式
+      </button>
+    </div>
+
     <div v-if="loading" class="state-loading">
       <q-spinner color="accent" />
+    </div>
+
+    <!-- Batch conflict (409) -->
+    <div v-else-if="batchConflict" class="state-error">
+      <TFIcon name="warning" :size="32" color="#f3727f" />
+      <span>有未完成的学习批次</span>
+      <span class="error-hint">请先完成或放弃当前批次</span>
+      <button class="btn-abort" @click="handleAbortBatch">
+        <TFIcon name="close" :size="16" />
+        放弃当前批次
+      </button>
     </div>
 
     <div v-else-if="error" class="state-error">
@@ -93,34 +133,22 @@ const formatTime = (t: string) => {
     </div>
 
     <template v-else>
-      <!-- 继续/重头学 选择 -->
-      <div v-if="showPrompt" class="continue-prompt">
-        <TFIcon name="school" :size="32" color="#1ed760" />
-        <p class="prompt-title">你已学习过该词表</p>
-        <p class="prompt-desc">已掌握 <strong>{{ learnedCount }}</strong> / {{ unmasteredTotal }} 个单词</p>
-        <div class="prompt-actions">
-          <button class="btn-continue" @click="handleContinue">
-            <TFIcon name="play_arrow" :size="16" />
-            继续学习
-          </button>
-          <button class="btn-restart" @click="handleRestart">
-            <TFIcon name="replay" :size="16" />
-            重头学
-          </button>
-        </div>
-      </div>
-
-      <template v-else>
+      <!-- Summary -->
       <div class="word-summary">
         <span class="total-count">{{ words.length }}</span>
         <span class="total-label">个待学单词</span>
-        <span v-if="unmasteredTotal > 0" class="progress-info">
-          （已掌握 {{ learnedCount }} / {{ unmasteredTotal }}）
+        <span v-if="dailyRemaining !== null" class="daily-info">
+          今日剩余 {{ dailyRemaining }}
+        </span>
+        <span v-else-if="mode === 'type'" class="daily-info type-mode-hint">
+          跟打模式不计入学习进度
         </span>
       </div>
 
       <div v-if="words.length === 0" class="state-empty">
-        <span>该视频中暂未出现此词表内的单词</span>
+        <TFIcon name="check_circle" :size="32" color="#1ed760" />
+        <span v-if="dailyRemaining === 0">今日学习目标已完成！</span>
+        <span v-else>该视频中暂未出现此词表内的单词</span>
       </div>
 
       <div v-else class="word-scroll">
@@ -148,10 +176,9 @@ const formatTime = (t: string) => {
 
       <div v-if="words.length > 0" class="action-area">
         <button class="start-btn" @click="handleStart">
-          开始学习
+          {{ mode === 'spell' ? '开始默写' : '开始跟打' }}
         </button>
       </div>
-      </template>
     </template>
   </div>
 </template>
@@ -175,6 +202,38 @@ const formatTime = (t: string) => {
   color: #fff;
 }
 
+.mode-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #1f1f1f;
+  border: 1px solid #333;
+  border-radius: 9999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b3b3b3;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &.active {
+    background: rgba(30, 215, 96, 0.15);
+    border-color: #1ed760;
+    color: #1ed760;
+  }
+  &:hover:not(.active) {
+    border-color: #555;
+    color: #fff;
+  }
+}
+
 .state-loading {
   display: flex;
   justify-content: center;
@@ -193,6 +252,28 @@ const formatTime = (t: string) => {
   text-align: center;
 }
 
+.error-hint {
+  font-size: 12px;
+  color: #888;
+}
+
+.btn-abort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: #f3727f;
+  border: 1px solid #f3727f;
+  border-radius: 9999px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover { background: rgba(243, 114, 127, 0.15); }
+}
+
 .word-summary {
   display: flex;
   align-items: baseline;
@@ -209,6 +290,17 @@ const formatTime = (t: string) => {
 .total-label {
   font-size: 14px;
   color: #b3b3b3;
+}
+
+.daily-info {
+  font-size: 12px;
+  color: #888;
+  margin-left: 8px;
+}
+
+.type-mode-hint {
+  color: #666;
+  font-style: italic;
 }
 
 .word-scroll {
@@ -311,78 +403,5 @@ const formatTime = (t: string) => {
 
   &:hover { background: #1fd665; }
   &:active { transform: scale(0.98); }
-}
-
-.progress-info {
-  font-size: 12px;
-  color: #888;
-  margin-left: 8px;
-}
-
-.continue-prompt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 36px 24px;
-  text-align: center;
-}
-
-.prompt-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.prompt-desc {
-  margin: 0;
-  font-size: 14px;
-  color: #b3b3b3;
-
-  strong {
-    color: #1ed760;
-    font-weight: 700;
-  }
-}
-
-.prompt-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.btn-continue {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #1ed760;
-  color: #000;
-  border: none;
-  border-radius: 9999px;
-  padding: 10px 24px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s;
-
-  &:hover { background: #1fd665; }
-}
-
-.btn-restart {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  color: #b3b3b3;
-  border: 1px solid #444;
-  border-radius: 9999px;
-  padding: 10px 24px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-
-  &:hover { background: #1f1f1f; color: #fff; }
 }
 </style>

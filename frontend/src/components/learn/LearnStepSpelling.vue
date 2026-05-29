@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
-import type { LearnWord } from '../../types'
+import type { LearnWord, CommitLearningResp } from '../../types'
+import * as learnService from '../../services/learn'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
@@ -8,40 +9,43 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  done: [correctIds: string[], wrongWords: LearnWord[]]
+  done: [totalWords: number, resp: CommitLearningResp | null]
   openCaptions: [word: string]
 }>()
 
-// 状态
+// Local queue: words to spell (manipulated on wrong answers)
+const queue = ref<LearnWord[]>([...props.words])
 const currentIndex = ref(0)
 const userInput = ref('')
-const inputRef = ref<HTMLInputElement>()
+const hiddenInput = ref<HTMLInputElement>()
 const correctCount = ref(0)
 const wrongCount = ref(0)
-const wrongWords = ref<LearnWord[]>([])
 const feedbackState = ref<'idle' | 'correct' | 'wrong'>('idle')
-const showDefinition = ref(false)  // 切换显示释义/翻译
-const showUkPhone = ref(false)     // 切换英式/美式音标
+const showDefinition = ref(false)
+const showUkPhone = ref(false)
 const shuffled = ref(false)
-const shuffledWords = ref<LearnWord[]>([])
+const lastCommitResp = ref<CommitLearningResp | null>(null)
+const committing = ref(false)
 
-// 随机排序
+// Shuffle
 const toggleShuffle = () => {
   if (shuffled.value) {
-    shuffledWords.value = [...props.words]
+    queue.value = [...props.words]
   } else {
-    shuffledWords.value = [...props.words].sort(() => Math.random() - 0.5)
+    queue.value = [...queue.value].sort(() => Math.random() - 0.5)
   }
   shuffled.value = !shuffled.value
   currentIndex.value = 0
   resetState()
 }
 
-// 初始化
-const displayWords = computed(() => shuffled.value ? shuffledWords.value : props.words)
-const currentWord = computed(() => displayWords.value[currentIndex.value])
-const total = computed(() => displayWords.value.length)
-const progress = computed(() => total.value > 0 ? (currentIndex.value / total.value) * 100 : 0)
+const currentWord = computed(() => queue.value[currentIndex.value])
+const targetChars = computed(() => currentWord.value ? currentWord.value.value.split('') : [])
+const total = computed(() => queue.value.length)
+const progress = computed(() => {
+  const original = props.words.length
+  return original > 0 ? (correctCount.value / original) * 100 : 0
+})
 
 const phone = computed(() => {
   if (!currentWord.value) return ''
@@ -53,80 +57,107 @@ const hint = computed(() => {
   return showDefinition.value ? currentWord.value.definition : currentWord.value.translation
 })
 
-// 重置状态
 const resetState = () => {
   userInput.value = ''
   feedbackState.value = 'idle'
-  nextTick(() => inputRef.value?.focus())
+  committing.value = false
+  nextTick(() => hiddenInput.value?.focus())
 }
 
-// 自动聚焦
-const focusInput = () => nextTick(() => inputRef.value?.focus())
+const focusInput = () => nextTick(() => hiddenInput.value?.focus())
 
-// 判定
 const normalize = (s: string) => s.trim().toLowerCase()
 
-const handleSubmit = () => {
-  if (feedbackState.value !== 'idle' || !currentWord.value) return
+const handleSubmit = async () => {
+  if (feedbackState.value !== 'idle' || !currentWord.value || committing.value) return
+  if (userInput.value.length === 0) return
+  committing.value = true
 
   const expected = normalize(currentWord.value.value)
   const given = normalize(userInput.value)
+  const isCorrect = given === expected
 
-  if (given === expected) {
+  try {
+    const resp = await learnService.commitLearning({
+      word: currentWord.value.value,
+      result: isCorrect ? 'correct' : 'wrong',
+    })
+    lastCommitResp.value = resp.data.data ?? null
+  } catch {
+    // Silent fail — still proceed with local state
+  }
+
+  if (isCorrect) {
     feedbackState.value = 'correct'
     correctCount.value++
+    committing.value = false
     setTimeout(() => {
-      goNext()
+      // Remove word from queue (it was answered correctly)
+      queue.value.splice(currentIndex.value, 1)
+      if (queue.value.length === 0) {
+        // All done
+        emit('done', correctCount.value, lastCommitResp.value)
+        return
+      }
+      // Adjust index if needed
+      if (currentIndex.value >= queue.value.length) {
+        currentIndex.value = queue.value.length - 1
+      }
+      resetState()
     }, 800)
   } else {
     feedbackState.value = 'wrong'
     wrongCount.value++
-    if (!wrongWords.value.find(w => w.value === currentWord.value!.value)) {
-      wrongWords.value.push(currentWord.value)
-    }
+    committing.value = false
+    // Move wrong word to queue head for immediate retry
+    const wrongWord = queue.value.splice(currentIndex.value, 1)[0]
+    queue.value.unshift(wrongWord)
+    currentIndex.value = 0
+    // Don't reset state yet — show correct answer, user presses Enter to retry
   }
 }
 
-const goNext = () => {
-  if (currentIndex.value < total.value - 1) {
-    currentIndex.value++
-    resetState()
-  } else {
-    // 完成
-    const correct = displayWords.value
-      .filter(w => !wrongWords.value.find(ww => ww.value === w.value))
-      .map(w => w.value)
-    emit('done', correct, wrongWords.value)
-  }
+const handleRetryAfterWrong = () => {
+  resetState()
 }
 
 const handleKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter') {
-    if (feedbackState.value === 'idle') {
-      handleSubmit()
-    } else if (feedbackState.value === 'wrong') {
-      goNext()
-    }
+  if (e.key.length > 1 && e.key !== 'Backspace' && e.key !== 'Enter') return
+  if (e.key === ' ' || e.key === 'Backspace') e.preventDefault()
+
+  if (feedbackState.value === 'wrong') {
+    if (e.key === 'Enter') handleRetryAfterWrong()
+    return
   }
-  if (e.key === 'Escape') {
-    // 忽略
+
+  if (feedbackState.value !== 'idle') return
+
+  if (e.key === 'Enter') {
+    handleSubmit()
+    return
+  }
+
+  if (e.key === 'Backspace') {
+    userInput.value = userInput.value.slice(0, -1)
+    return
+  }
+
+  // Append character, but don't exceed target length
+  if (userInput.value.length < targetChars.value.length) {
+    userInput.value += e.key
   }
 }
-
-// 初始化
-resetState()
-focusInput()
 </script>
 
 <template>
   <div class="spelling">
-    <!-- 顶部进度 -->
+    <!-- Progress bar -->
     <div class="progress-bar-wrap">
       <div class="progress-bar">
         <div class="progress-fill" :style="{ width: progress + '%' }" />
       </div>
       <div class="progress-meta">
-        <span class="progress-count">{{ currentIndex + 1 }}/{{ total }}</span>
+        <span class="progress-count">{{ correctCount }}/{{ props.words.length }}</span>
         <div class="score-badges">
           <span class="score-correct">
             <TFIcon name="check" :size="12" color="#1ed760" />
@@ -140,7 +171,7 @@ focusInput()
       </div>
     </div>
 
-    <!-- 随机按钮 -->
+    <!-- Shuffle button -->
     <div class="toolbar">
       <button class="tool-btn" :class="{ active: shuffled }" @click="toggleShuffle">
         <TFIcon name="shuffle" :size="16" />
@@ -148,9 +179,9 @@ focusInput()
       </button>
     </div>
 
-    <!-- 单词卡片 -->
-    <div class="spelling-card" :class="`feedback-${feedbackState}`">
-      <!-- 音标 -->
+    <!-- Word card -->
+    <div class="spelling-card" @click="focusInput">
+      <!-- Phonetic -->
       <div class="phonetic-row">
         <span class="phoneme" @click="showUkPhone = !showUkPhone">
           {{ phone || '—' }}
@@ -159,52 +190,83 @@ focusInput()
         <span class="pos-tag">{{ currentWord?.pos }}</span>
       </div>
 
-      <!-- 提示（释义/翻译） -->
+      <!-- Hint -->
       <div class="hint-row" @click="showDefinition = !showDefinition">
         <span class="hint-text">{{ hint || '—' }}</span>
         <span class="hint-toggle">{{ showDefinition ? '译' : '义' }}</span>
       </div>
 
-      <!-- 输入区 -->
-      <div class="input-area">
-        <input
-          ref="inputRef"
-          v-model="userInput"
-          class="spell-input"
-          :class="{ 'input-correct': feedbackState === 'correct', 'input-wrong': feedbackState === 'wrong' }"
-          type="text"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
-          spellcheck="false"
-          :disabled="feedbackState !== 'idle'"
-          @keydown="handleKeydown"
-        />
-        <button
-          class="submit-btn"
-          :class="{ 'submit-correct': feedbackState === 'correct', 'submit-wrong': feedbackState === 'wrong' }"
-          @click="feedbackState === 'idle' ? handleSubmit() : (feedbackState === 'wrong' ? goNext() : null)"
+      <!-- Char boxes -->
+      <div class="char-boxes">
+        <div
+          v-for="(ch, i) in targetChars"
+          :key="i"
+          class="char-box"
+          :class="{
+            'state-filled': feedbackState === 'idle' && i < userInput.length,
+            'state-cursor': feedbackState === 'idle' && i === userInput.length,
+            'state-correct': feedbackState === 'correct',
+            'state-match': feedbackState === 'wrong' && i < userInput.length && userInput[i].toLowerCase() === ch.toLowerCase(),
+            'state-mismatch': feedbackState === 'wrong' && i < userInput.length && userInput[i].toLowerCase() !== ch.toLowerCase(),
+            'state-missed': feedbackState === 'wrong' && i >= userInput.length,
+            'state-pending': feedbackState === 'idle' && i > userInput.length,
+          }"
         >
-          <template v-if="feedbackState === 'idle'">确认</template>
-          <template v-else-if="feedbackState === 'correct'">
-            <TFIcon name="check" :size="18" color="#000" />
-          </template>
-          <template v-else>下一个</template>
+          <span v-if="feedbackState === 'correct'" class="char-display correct-char">{{ ch }}</span>
+          <span v-else-if="feedbackState === 'wrong' && i < userInput.length" class="char-display" :class="userInput[i].toLowerCase() === ch.toLowerCase() ? 'match-char' : 'mismatch-char'">{{ userInput[i] }}</span>
+          <span v-else-if="feedbackState === 'wrong'" class="char-display missed-char">{{ ch }}</span>
+          <span v-else-if="i < userInput.length" class="char-display">{{ userInput[i] }}</span>
+          <span v-else-if="i === userInput.length" class="cursor-line">|</span>
+          <span v-else class="char-placeholder">_</span>
+        </div>
+      </div>
+
+      <!-- Submit button -->
+      <div class="submit-row">
+        <button
+          v-if="feedbackState === 'idle'"
+          class="submit-btn"
+          :disabled="committing || userInput.length === 0"
+          @click="handleSubmit"
+        >
+          <q-spinner v-if="committing" :size="16" color="#000" />
+          <span v-else>确认</span>
+        </button>
+        <button
+          v-else-if="feedbackState === 'wrong'"
+          class="retry-btn"
+          @click="handleRetryAfterWrong"
+        >
+          <TFIcon name="replay" :size="16" />
+          <span>重新输入</span>
         </button>
       </div>
 
-      <!-- 正确时的动画反馈 -->
+      <!-- Correct feedback overlay -->
       <div v-if="feedbackState === 'correct'" class="feedback-overlay correct">
         <TFIcon name="check_circle" :size="48" color="#1ed760" />
       </div>
 
-      <!-- 错误时的正确答案 -->
+      <!-- Wrong answer display -->
       <div v-if="feedbackState === 'wrong'" class="wrong-answer">
+        <TFIcon name="close" :size="16" color="#f3727f" />
         <span class="correct-label">正确答案：</span>
         <span class="correct-word">{{ currentWord?.value }}</span>
       </div>
 
-      <!-- 语境按钮 -->
+      <!-- Hidden input for keyboard capture -->
+      <input
+        ref="hiddenInput"
+        class="hidden-input"
+        type="text"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        @keydown="handleKeydown"
+      />
+
+      <!-- Context button -->
       <button class="context-btn" @click="emit('openCaptions', currentWord?.value ?? '')">
         <TFIcon name="lightbulb" :size="16" color="#1ed760" />
         <span>查看语境</span>
@@ -359,43 +421,154 @@ focusInput()
   border-radius: 4px;
 }
 
-.input-area {
+// Char boxes
+.char-boxes {
   display: flex;
-  gap: 10px;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0;
 }
 
-.spell-input {
-  flex: 1;
+.char-box {
+  width: 36px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 2px solid #333;
   background: #121212;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 12px 16px;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  color: #fff;
-  outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.15s;
+  user-select: none;
 
-  &::placeholder { color: #444; font-weight: 400; }
-  &:focus { border-color: #555; }
-  &.input-correct { border-color: #1ed760; }
-  &.input-wrong { border-color: #f3727f; }
+  &.state-cursor {
+    border-color: #1ed760;
+    background: rgba(30, 215, 96, 0.08);
+  }
+
+  &.state-filled {
+    border-color: #555;
+    background: #1a1a1a;
+  }
+
+  &.state-correct {
+    border-color: #1ed760;
+    background: rgba(30, 215, 96, 0.15);
+  }
+
+  &.state-match {
+    border-color: #1ed760;
+    background: rgba(30, 215, 96, 0.1);
+  }
+
+  &.state-mismatch {
+    border-color: #f3727f;
+    background: rgba(243, 114, 127, 0.15);
+    animation: shake 0.3s ease;
+  }
+
+  &.state-missed {
+    border-color: #f3727f;
+    background: rgba(243, 114, 127, 0.08);
+  }
+
+  &.state-pending {
+    border-color: #2a2a2a;
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.char-display {
+  color: #e0e0e0;
+  font-size: 20px;
+  font-weight: 700;
+
+  &.correct-char {
+    color: #1ed760;
+  }
+
+  &.match-char {
+    color: #1ed760;
+  }
+
+  &.mismatch-char {
+    color: #f3727f;
+  }
+
+  &.missed-char {
+    color: rgba(243, 114, 127, 0.5);
+    font-size: 14px;
+  }
+}
+
+.cursor-line {
+  color: #1ed760;
+  font-weight: 300;
+  font-size: 24px;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.char-placeholder {
+  color: #333;
+  font-size: 20px;
+}
+
+.hidden-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.submit-row {
+  display: flex;
+  justify-content: center;
 }
 
 .submit-btn {
   background: #1ed760;
   color: #000;
   border: none;
-  border-radius: 8px;
-  padding: 0 20px;
+  border-radius: 9999px;
+  padding: 10px 40px;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+
+  &:hover { background: #1fd665; }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+
+.retry-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(243, 114, 127, 0.15);
+  border: 1px solid rgba(243, 114, 127, 0.4);
+  border-radius: 9999px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f3727f;
+  cursor: pointer;
   transition: background 0.15s;
 
-  &.submit-correct { background: #1ed760; }
-  &.submit-wrong { background: #f3727f; color: #fff; }
-  &:hover { filter: brightness(1.1); }
+  &:hover { background: rgba(243, 114, 127, 0.25); }
 }
 
 .feedback-overlay {
@@ -407,6 +580,7 @@ focusInput()
   background: rgba(0, 0, 0, 0.5);
   border-radius: 12px;
   animation: fadeIn 0.2s ease;
+  pointer-events: none;
 
   &.correct { animation: popIn 0.3s ease; }
 }

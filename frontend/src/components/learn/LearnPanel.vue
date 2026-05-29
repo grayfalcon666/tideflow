@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { LearnWord, VocabList, WordStatus } from '../../types'
-import * as learnService from '../../services/learn'
+import type { LearnWord, VocabList, LearnWordsResp, LearnMode, CommitLearningResp } from '../../types'
+import { abortBatch } from '../../services/learn'
 import { useLearnSettings } from '../../composables/useLearnSettings'
 import LearnStepSelectList from './LearnStepSelectList.vue'
 import LearnStepWordList from './LearnStepWordList.vue'
 import LearnStepSpelling from './LearnStepSpelling.vue'
+import LearnStepTyping from './LearnStepTyping.vue'
 import LearnStepResult from './LearnStepResult.vue'
 import LearnCaptionDrawer from './LearnCaptionDrawer.vue'
 import TFIcon from '../common/TFIcon.vue'
@@ -20,33 +21,29 @@ const emit = defineEmits<{
   'update:modelValue': [val: boolean]
 }>()
 
-// 步骤状态机
+// Step state machine
 type Step = 'select' | 'preview' | 'spelling' | 'result'
 const step = ref<Step>('select')
 const selectedList = ref<VocabList | null>(null)
 const spellingWords = ref<LearnWord[]>([])
-const resultCorrectCount = ref(0)
-const resultWrongWords = ref<LearnWord[]>([])
+const totalWordsCompleted = ref(0)
+const lastCommitResp = ref<CommitLearningResp | null>(null)
+const batchRemaining = ref(0)
+const learnMode = ref<LearnMode>('spell')
 
-// 分批次学习进度
-const learnedCount = ref(0)
-const unmasteredTotal = ref(0)
-const isRetryBatch = ref(false)
 const { chunkSize } = useLearnSettings()
 
-// 语境抽屉
+// Caption drawer
 const showCaptionDrawer = ref(false)
 const captionWord = ref('')
 
-// 退出确认
+// Exit confirm
 const showExitConfirm = ref(false)
 
-// 关闭面板
 const closePanel = () => {
   emit('update:modelValue', false)
 }
 
-// 返回按钮
 const goBack = () => {
   if (step.value === 'preview') {
     step.value = 'select'
@@ -58,8 +55,15 @@ const goBack = () => {
   }
 }
 
-const confirmExit = () => {
+const confirmExit = async () => {
   showExitConfirm.value = false
+  // Abort batch on exit during spell mode (type mode has no batch)
+  if (step.value === 'spelling' && learnMode.value === 'spell') {
+    await abortBatch().catch(() => {})
+  }
+  step.value = 'select'
+  selectedList.value = null
+  spellingWords.value = []
   closePanel()
 }
 
@@ -67,92 +71,64 @@ const cancelExit = () => {
   showExitConfirm.value = false
 }
 
-// 打开语境抽屉
 const handleOpenCaptions = (word: string) => {
   captionWord.value = word
   showCaptionDrawer.value = true
 }
 
-// 语境跳转视频
 const handleSeekTo = (seconds: number) => {
   props.videoPlayerRef?.seekTo(seconds)
 }
 
-// 词表选择
+// List selection
 const handleListSelect = (list: VocabList) => {
   selectedList.value = list
   step.value = 'preview'
 }
 
-// 开始学习
-const handleStartLearning = (words: LearnWord[], _learnedCount: number, _unmasteredTotal: number) => {
+// Start learning
+const handleStartLearning = (words: LearnWord[], batchResp: LearnWordsResp, mode: LearnMode) => {
   spellingWords.value = words
-  learnedCount.value = _learnedCount
-  unmasteredTotal.value = _unmasteredTotal
-  resultCorrectCount.value = 0
-  resultWrongWords.value = []
+  totalWordsCompleted.value = 0
+  lastCommitResp.value = null
+  batchRemaining.value = batchResp.batch_remaining
+  learnMode.value = mode
   step.value = 'spelling'
 }
 
-// 是否还有更多批次
+// Whether there are more batches to continue
 const hasMoreBatches = computed(() => {
-  return learnedCount.value + spellingWords.value.length < unmasteredTotal.value
+  return learnMode.value === 'spell' && batchRemaining.value > 0
 })
 
-// 完成拼写 → 提交学习结果
-const handleSpellingDone = async (correctIds: string[], wrongWords: LearnWord[]) => {
-  resultCorrectCount.value = correctIds.length
-  resultWrongWords.value = wrongWords
-
-  // 构建提交数据
-  const wordsPracticed: WordStatus[] = []
-  for (const w of spellingWords.value) {
-    wordsPracticed.push({
-      word: w.value,
-      status: wrongWords.find(ww => ww.value === w.value) ? 0 : 1,
-    })
+// Spelling done (spell mode: all committed; type mode: all typed correctly)
+const handleSpellingDone = (totalWords: number, resp?: CommitLearningResp | null) => {
+  totalWordsCompleted.value = totalWords
+  lastCommitResp.value = resp ?? null
+  if (resp) {
+    batchRemaining.value = resp.batch_remaining
   }
-
-  try {
-    await learnService.commitLearning({
-      video_id: props.videoId,
-      words_practiced: wordsPracticed,
-      is_retry: isRetryBatch.value,
-    })
-  } catch { /* 静默失败，不影响展示结果 */ }
-  isRetryBatch.value = false
-
   step.value = 'result'
 }
 
-// 继续下一批
+// Continue next batch
 const handleContinueNextBatch = () => {
   if (!selectedList.value) return
-  // 回到预览，重新加载下一批
   step.value = 'preview'
 }
 
-// 重练错词
-const handleRetryWrong = (words: LearnWord[]) => {
-  spellingWords.value = words
-  resultCorrectCount.value = 0
-  resultWrongWords.value = []
-  isRetryBatch.value = true
-  step.value = 'spelling'
-}
-
-// 面板宽度
+// Panel width
 const panelWidth = computed(() => {
   if (typeof window !== 'undefined' && window.innerWidth < 768) return '100vw'
   return '520px'
 })
 
-// 标题
+// Title
 const panelTitle = computed(() => {
   switch (step.value) {
     case 'select': return '语境学习'
     case 'preview': return selectedList.value?.name ?? '选择词表'
-    case 'spelling': return '拼写练习'
+    case 'spelling': return learnMode.value === 'spell' ? '默写练习' : '跟打练习'
     case 'result': return '学习结果'
   }
 })
@@ -168,7 +144,7 @@ const panelTitle = computed(() => {
     seamless
   >
     <div class="learn-panel">
-      <!-- 头部 -->
+      <!-- Header -->
       <div class="panel-header">
         <button v-if="step !== 'select'" class="back-btn" @click="goBack">
           <TFIcon name="arrow_back" :size="20" />
@@ -182,7 +158,7 @@ const panelTitle = computed(() => {
         </button>
       </div>
 
-      <!-- 内容区 -->
+      <!-- Body -->
       <div class="panel-body">
         <LearnStepSelectList
           v-if="step === 'select'"
@@ -198,31 +174,38 @@ const panelTitle = computed(() => {
           @openCaptions="handleOpenCaptions"
         />
 
+        <!-- Spell mode -->
         <LearnStepSpelling
-          v-else-if="step === 'spelling'"
+          v-else-if="step === 'spelling' && learnMode === 'spell'"
           :words="spellingWords"
-          @done="handleSpellingDone"
+          @done="(total, resp) => handleSpellingDone(total, resp)"
+          @openCaptions="handleOpenCaptions"
+        />
+
+        <!-- Type mode -->
+        <LearnStepTyping
+          v-else-if="step === 'spelling' && learnMode === 'type'"
+          :words="spellingWords"
+          @done="(total) => handleSpellingDone(total)"
           @openCaptions="handleOpenCaptions"
         />
 
         <LearnStepResult
           v-else-if="step === 'result'"
-          :total="spellingWords.length"
-          :correctCount="resultCorrectCount"
-          :wrongWords="resultWrongWords"
+          :total="totalWordsCompleted"
+          :dailyWordsToday="lastCommitResp?.daily_words_today ?? 0"
           :hasMoreBatches="hasMoreBatches"
-          @retryWrong="handleRetryWrong"
+          :mode="learnMode"
           @continueNextBatch="handleContinueNextBatch"
           @close="closePanel"
-          @openCaptions="handleOpenCaptions"
         />
       </div>
 
-      <!-- 退出确认对话框 -->
+      <!-- Exit confirm dialog -->
       <q-dialog v-model="showExitConfirm" persistent>
         <q-card class="exit-confirm-card">
           <q-card-section class="confirm-body">
-            <p>学习进度不会保存，确定退出吗？</p>
+            <p>{{ learnMode === 'spell' ? '学习进度不会保存，确定退出吗？' : '确定退出跟打练习吗？' }}</p>
           </q-card-section>
           <q-card-actions align="right">
             <q-btn flat no-caps label="取消" @click="cancelExit" />
@@ -231,7 +214,7 @@ const panelTitle = computed(() => {
         </q-card>
       </q-dialog>
 
-      <!-- 语境抽屉（子抽屉） -->
+      <!-- Caption drawer -->
       <q-dialog
         v-model="showCaptionDrawer"
         position="right"
