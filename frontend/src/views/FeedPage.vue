@@ -181,6 +181,7 @@ watch([activeIndex, activeTab], () => {
 })
 
 const { isMuted } = useVideoControls((key) => {
+  if (learnPanelOpen.value) return
   if (key === 'c' || key === 'C') {
     const id = items.value[activeIndex.value]?.video_id
     if (id) {
@@ -262,6 +263,8 @@ const pauseAllPlayers = () => {
 
 // Keyboard shortcuts
 const onKeyDown = (e: KeyboardEvent) => {
+  // Skip all shortcuts when learn panel or other overlays are open
+  if (learnPanelOpen.value) return
   const tag = (e.target as HTMLElement).tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') return
   const player = getActivePlayer()
