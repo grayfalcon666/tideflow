@@ -4,6 +4,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 const props = defineProps<{
   items: any[]
   activeIndex: number
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -48,6 +49,7 @@ const handleTouchStart = (e: TouchEvent) => {
 }
 
 const handleTouchEnd = (e: TouchEvent) => {
+  if (props.disabled) return
   const deltaY = lastTouchY - e.changedTouches[0].clientY
   if (Math.abs(deltaY) < 50) return
   const now = Date.now()
@@ -62,7 +64,7 @@ const handleTouchEnd = (e: TouchEvent) => {
 
 // Debounce: only update after scroll animation settles (~300ms after last scroll event)
 const handleScroll = () => {
-  if (!scrollEl.value || isProgrammaticScroll || slideHeight === 0) return
+  if (!scrollEl.value || isProgrammaticScroll || slideHeight === 0 || props.disabled) return
   if (scrollEndTimer) clearTimeout(scrollEndTimer)
   scrollEndTimer = setTimeout(syncActiveFromScroll, 300)
 }
@@ -114,7 +116,7 @@ defineExpose({ scrollToIndex: (idx: number) => {
 </script>
 
 <template>
-  <div ref="scrollEl" class="feed-swiper">
+  <div ref="scrollEl" class="feed-swiper" :class="{ 'swiper-locked': disabled }">
     <div
       v-for="(item, index) in items"
       :key="item?.video_id ?? index"
@@ -135,6 +137,12 @@ defineExpose({ scrollToIndex: (idx: number) => {
 
   &::-webkit-scrollbar {
     display: none;
+  }
+
+  &.swiper-locked {
+    overflow: hidden;
+    scroll-snap-type: none;
+    touch-action: none;
   }
 }
 

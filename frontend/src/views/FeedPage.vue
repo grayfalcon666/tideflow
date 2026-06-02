@@ -163,6 +163,7 @@ const handleOpenLearn = (videoId: number) => {
   notePanelOpen.value = false
   learnVideoId.value = videoId
   learnPanelOpen.value = true
+  getActivePlayer()?.pause?.()
 }
 
 const handleFeedNoteSeek = (timestamp: number) => {
@@ -354,6 +355,7 @@ const onKeyDown = (e: KeyboardEvent) => {
         ref="swiperRef"
         :items="items"
         :activeIndex="activeIndex"
+        :disabled="learnPanelOpen"
         @update:activeIndex="activeIndex = $event"
         @reachEnd="feedStore.loadMore(activeTab)"
       >
@@ -377,6 +379,8 @@ const onKeyDown = (e: KeyboardEvent) => {
             @closeNotes="handleCloseNotes"
             @closeLearn="handleCloseLearn"
             @noteSeek="(ts) => handleFeedNoteSeek(ts)"
+            @learnSeek="(ts) => getActivePlayer()?.seekTo?.(ts)"
+            @learnPause="getActivePlayer()?.pause?.()"
             @share="(videoId: number) => handleShare(item)"
             @openLearn="(videoId: number) => handleOpenLearn(videoId)"
             :wordbankStatus="item.wordbank_status"

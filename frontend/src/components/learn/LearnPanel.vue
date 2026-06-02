@@ -14,6 +14,8 @@ import TFIcon from '../common/TFIcon.vue'
 const props = withDefaults(defineProps<{
   open: boolean
   videoId: number
+  videoSrc?: string
+  videoPoster?: string
   videoPlayerRef?: any
   mode?: 'inline' | 'dialog'
 }>(), {
@@ -22,6 +24,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   close: []
+  seekTo: [seconds: number]
+  pause: []
 }>()
 
 const dialogModel = computed({
@@ -30,8 +34,9 @@ const dialogModel = computed({
 })
 
 // Step state machine
-type Step = 'select' | 'preview' | 'spelling' | 'result'
+type Step = 'select' | 'preview' | 'spelling' | 'result' | 'caption'
 const step = ref<Step>('select')
+const prevStep = ref<Step>('select')
 const selectedList = ref<VocabList | null>(null)
 const spellingWords = ref<LearnWord[]>([])
 const totalWordsCompleted = ref(0)
@@ -41,8 +46,7 @@ const learnMode = ref<LearnMode>('spell')
 
 const { chunkSize } = useLearnSettings()
 
-// Caption drawer
-const showCaptionDrawer = ref(false)
+// Caption (inline step)
 const captionWord = ref('')
 
 // Exit confirm
@@ -60,6 +64,8 @@ const goBack = () => {
     showExitConfirm.value = true
   } else if (step.value === 'result') {
     closePanel()
+  } else if (step.value === 'caption') {
+    step.value = prevStep.value
   }
 }
 
@@ -81,11 +87,16 @@ const cancelExit = () => {
 
 const handleOpenCaptions = (word: string) => {
   captionWord.value = word
-  showCaptionDrawer.value = true
+  prevStep.value = step.value
+  step.value = 'caption'
+  emit('pause')
 }
 
 const handleSeekTo = (seconds: number) => {
-  props.videoPlayerRef?.seekTo(seconds)
+  if (props.videoPlayerRef) {
+    props.videoPlayerRef.seekTo(seconds)
+  }
+  emit('seekTo', seconds)
 }
 
 // List selection
@@ -132,6 +143,7 @@ const panelTitle = computed(() => {
     case 'preview': return selectedList.value?.name ?? '选择词表'
     case 'spelling': return learnMode.value === 'spell' ? '默写练习' : '跟打练习'
     case 'result': return '学习结果'
+    case 'caption': return `语境 · ${captionWord.value}`
   }
 })
 </script>
@@ -186,6 +198,14 @@ const panelTitle = computed(() => {
           @continueNextBatch="handleContinueNextBatch"
           @close="closePanel"
         />
+        <LearnCaptionDrawer
+          v-else-if="step === 'caption' && captionWord"
+          :videoId="videoId"
+          :word="captionWord"
+          :videoSrc="videoSrc"
+          :videoPoster="videoPoster"
+          @seekTo="handleSeekTo"
+        />
       </div>
 
       <q-dialog v-model="showExitConfirm" persistent>
@@ -198,16 +218,6 @@ const panelTitle = computed(() => {
             <q-btn flat no-caps label="确定退出" color="negative" @click="confirmExit" />
           </q-card-actions>
         </q-card>
-      </q-dialog>
-
-      <q-dialog v-model="showCaptionDrawer" position="right" :max-width="420" seamless>
-        <LearnCaptionDrawer
-          v-if="captionWord"
-          :videoId="videoId"
-          :word="captionWord"
-          @seekTo="handleSeekTo"
-          @close="showCaptionDrawer = false"
-        />
       </q-dialog>
     </div>
   </q-dialog>
@@ -260,6 +270,14 @@ const panelTitle = computed(() => {
         @continueNextBatch="handleContinueNextBatch"
         @close="closePanel"
       />
+      <LearnCaptionDrawer
+        v-else-if="step === 'caption' && captionWord"
+        :videoId="videoId"
+        :word="captionWord"
+        :videoSrc="videoSrc"
+        :videoPoster="videoPoster"
+        @seekTo="handleSeekTo"
+      />
     </div>
 
     <q-dialog v-model="showExitConfirm" persistent>
@@ -272,16 +290,6 @@ const panelTitle = computed(() => {
           <q-btn flat no-caps label="确定退出" color="negative" @click="confirmExit" />
         </q-card-actions>
       </q-card>
-    </q-dialog>
-
-    <q-dialog v-model="showCaptionDrawer" position="right" :max-width="420" seamless>
-      <LearnCaptionDrawer
-        v-if="captionWord"
-        :videoId="videoId"
-        :word="captionWord"
-        @seekTo="handleSeekTo"
-        @close="showCaptionDrawer = false"
-      />
     </q-dialog>
   </div>
 </template>

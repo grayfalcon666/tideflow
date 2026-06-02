@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import type { Caption } from '../../types'
 import * as learnService from '../../services/learn'
 import TFIcon from '../common/TFIcon.vue'
@@ -7,11 +7,12 @@ import TFIcon from '../common/TFIcon.vue'
 const props = defineProps<{
   videoId: number
   word: string
+  videoSrc?: string
+  videoPoster?: string
 }>()
 
 const emit = defineEmits<{
   seekTo: [seconds: number]
-  close: []
 }>()
 
 // 会话内缓存
@@ -19,6 +20,18 @@ const cache = new Map<string, Caption[]>()
 const captions = ref<Caption[]>([])
 const loading = ref(false)
 const error = ref('')
+
+// 小窗视频
+const miniVideoRef = ref<HTMLVideoElement>()
+
+const handleCaptionClick = (cap: Caption) => {
+  const seconds = parseSeconds(cap.start)
+  emit('seekTo', seconds)
+  if (miniVideoRef.value) {
+    miniVideoRef.value.currentTime = seconds
+    miniVideoRef.value.play().catch(() => {})
+  }
+}
 
 // 加载字幕
 const load = async () => {
@@ -64,9 +77,6 @@ const highlightWord = (content: string) => {
   <div class="caption-drawer">
     <div class="drawer-header">
       <span class="word-label">{{ word }}</span>
-      <button class="close-btn" @click="emit('close')">
-        <TFIcon name="close" :size="20" />
-      </button>
     </div>
 
     <div v-if="loading" class="state-loading">
@@ -79,16 +89,27 @@ const highlightWord = (content: string) => {
     <div v-else-if="captions.length === 0" class="state-empty">
       <span>暂无语境</span>
     </div>
-    <div v-else class="caption-list">
+    <div v-else class="caption-list" :class="{ 'has-mini-player': videoSrc }">
       <div
         v-for="(cap, i) in captions"
         :key="i"
         class="caption-item"
-        @click="emit('seekTo', parseSeconds(cap.start))"
+        @click="handleCaptionClick(cap)"
       >
         <span class="caption-time">{{ cap.start }}</span>
         <span class="caption-content" v-html="highlightWord(cap.content)" />
       </div>
+    </div>
+
+    <div v-if="videoSrc" class="mini-player-wrap">
+      <video
+        ref="miniVideoRef"
+        :src="videoSrc"
+        :poster="videoPoster"
+        class="mini-video"
+        playsinline
+        preload="metadata"
+      />
     </div>
   </div>
 </template>
@@ -116,18 +137,6 @@ const highlightWord = (content: string) => {
   color: #1ed760;
 }
 
-.close-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #b3b3b3;
-  padding: 4px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  &:hover { color: #fff; }
-}
-
 .state-loading,
 .state-error,
 .state-empty {
@@ -145,6 +154,24 @@ const highlightWord = (content: string) => {
   flex: 1;
   overflow-y: auto;
   padding: 8px 0;
+
+  &.has-mini-player {
+    padding-bottom: 8px;
+  }
+}
+
+.mini-player-wrap {
+  flex-shrink: 0;
+  padding: 8px 16px 12px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.mini-video {
+  width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  background: #000;
+  object-fit: contain;
 }
 
 .caption-item {

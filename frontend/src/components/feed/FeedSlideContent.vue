@@ -34,6 +34,8 @@ const emit = defineEmits<{
   (e: 'closeNotes'): void
   (e: 'closeLearn'): void
   (e: 'noteSeek', timestamp: number): void
+  (e: 'learnSeek', seconds: number): void
+  (e: 'learnPause'): void
 }>()
 </script>
 
@@ -94,7 +96,11 @@ const emit = defineEmits<{
         v-if="learnOpen"
         :open="learnOpen"
         :videoId="learnVideoId ?? item?.video_id ?? 0"
+        :videoSrc="item?.play_url"
+        :videoPoster="item?.cover_url"
         @close="emit('closeLearn')"
+        @seekTo="(ts) => emit('learnSeek', ts)"
+        @pause="emit('learnPause')"
       />
     </div>
   </div>
