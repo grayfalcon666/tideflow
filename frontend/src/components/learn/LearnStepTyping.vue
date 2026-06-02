@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
 import type { LearnWord } from '../../types'
+import { useTypingSounds } from '../../composables/useTypingSounds'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
@@ -25,6 +26,8 @@ const charStates = ref<Array<'pending' | 'correct' | 'wrong'>>([])
 const cursorPos = ref(0)
 const wordDone = ref(false)
 const wordHasError = ref(false)
+
+const { playKey, playBackspace, playCorrect, playWrong } = useTypingSounds()
 
 const currentWord = computed(() => queue.value[currentIndex.value])
 const targetChars = computed(() => currentWord.value ? currentWord.value.value.split('') : [])
@@ -85,6 +88,7 @@ const handleKeydown = (e: KeyboardEvent) => {
       cursorPos.value--
       charStates.value[cursorPos.value] = 'pending'
       wordHasError.value = charStates.value.some(s => s === 'wrong')
+      playBackspace()
     }
     return
   }
@@ -98,9 +102,11 @@ const handleKeydown = (e: KeyboardEvent) => {
 
   if (given === expected) {
     charStates.value[cursorPos.value] = 'correct'
+    playKey()
   } else {
     charStates.value[cursorPos.value] = 'wrong'
     wordHasError.value = true
+    playWrong()
   }
 
   cursorPos.value++
@@ -109,6 +115,7 @@ const handleKeydown = (e: KeyboardEvent) => {
     wordDone.value = true
     if (!wordHasError.value) {
       correctCount.value++
+      playCorrect()
       setTimeout(() => {
         if (wordDone.value) goNextWord()
       }, 600)

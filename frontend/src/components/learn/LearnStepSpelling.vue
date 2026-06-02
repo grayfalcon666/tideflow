@@ -2,6 +2,7 @@
 import { ref, computed, nextTick } from 'vue'
 import type { LearnWord, CommitLearningResp } from '../../types'
 import * as learnService from '../../services/learn'
+import { useTypingSounds } from '../../composables/useTypingSounds'
 import TFIcon from '../common/TFIcon.vue'
 
 const props = defineProps<{
@@ -26,6 +27,8 @@ const showUkPhone = ref(false)
 const shuffled = ref(false)
 const lastCommitResp = ref<CommitLearningResp | null>(null)
 const committing = ref(false)
+
+const { playKey, playBackspace, playCorrect, playWrong } = useTypingSounds()
 
 // Shuffle
 const toggleShuffle = () => {
@@ -90,6 +93,7 @@ const handleSubmit = async () => {
   if (isCorrect) {
     feedbackState.value = 'correct'
     correctCount.value++
+    playCorrect()
     committing.value = false
     setTimeout(() => {
       // Remove word from queue (it was answered correctly)
@@ -108,6 +112,7 @@ const handleSubmit = async () => {
   } else {
     feedbackState.value = 'wrong'
     wrongCount.value++
+    playWrong()
     committing.value = false
     // Move wrong word to queue head for immediate retry
     const wrongWord = queue.value.splice(currentIndex.value, 1)[0]
@@ -139,12 +144,14 @@ const handleKeydown = (e: KeyboardEvent) => {
 
   if (e.key === 'Backspace') {
     userInput.value = userInput.value.slice(0, -1)
+    playBackspace()
     return
   }
 
   // Append character, but don't exceed target length
   if (userInput.value.length < targetChars.value.length) {
     userInput.value += e.key
+    playKey()
   }
 }
 </script>

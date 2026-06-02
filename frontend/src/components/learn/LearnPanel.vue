@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { LearnWord, VocabList, LearnWordsResp, LearnMode, CommitLearningResp } from '../../types'
 import { abortBatch } from '../../services/learn'
 import { useLearnSettings } from '../../composables/useLearnSettings'
+import { useTypingSounds } from '../../composables/useTypingSounds'
 import LearnStepSelectList from './LearnStepSelectList.vue'
 import LearnStepWordList from './LearnStepWordList.vue'
 import LearnStepSpelling from './LearnStepSpelling.vue'
@@ -45,6 +46,7 @@ const batchRemaining = ref(0)
 const learnMode = ref<LearnMode>('spell')
 
 const { chunkSize } = useLearnSettings()
+const { enabled: soundEnabled, toggle: toggleSound } = useTypingSounds()
 
 // Caption (inline step)
 const captionWord = ref('')
@@ -159,6 +161,9 @@ const panelTitle = computed(() => {
           <TFIcon name="school" :size="20" color="#1ed760" />
           <span>{{ panelTitle }}</span>
         </div>
+        <button class="sound-toggle-btn" :class="{ off: !soundEnabled }" @click="toggleSound">
+          <TFIcon :name="soundEnabled ? 'volume_up' : 'volume_off'" :size="18" />
+        </button>
         <button class="close-btn" @click="step === 'spelling' ? (showExitConfirm = true) : closePanel()">
           <TFIcon name="close" :size="20" />
         </button>
@@ -231,6 +236,9 @@ const panelTitle = computed(() => {
         <TFIcon name="school" :size="20" color="#1ed760" />
         <span>{{ panelTitle }}</span>
       </div>
+      <button class="sound-toggle-btn" :class="{ off: !soundEnabled }" @click="toggleSound">
+        <TFIcon :name="soundEnabled ? 'volume_up' : 'volume_off'" :size="18" />
+      </button>
       <button class="close-btn" @click="step === 'spelling' ? (showExitConfirm = true) : closePanel()">
         <TFIcon name="close" :size="20" />
       </button>
@@ -346,6 +354,20 @@ const panelTitle = computed(() => {
   font-size: 16px;
   font-weight: 700;
   color: #fff;
+}
+
+.sound-toggle-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #b3b3b3;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+  &.off { color: #555; }
+  &:hover { color: #fff; background: rgba(255,255,255,0.06); }
 }
 
 .close-btn {
