@@ -4,11 +4,8 @@ import { useRouter } from 'vue-router'
 import FeedTabBar from '../components/feed/FeedTabBar.vue'
 import FeedSwiper from '../components/feed/FeedSwiper.vue'
 import FeedSlideContent from '../components/feed/FeedSlideContent.vue'
-import CommentDrawer from '../components/comment/CommentDrawer.vue'
-import NotePanel from '../components/note/NotePanel.vue'
 import ShareMenu from '../components/video/ShareMenu.vue'
 import BottomNav from '../components/layout/BottomNav.vue'
-import LearnPanel from '../components/learn/LearnPanel.vue'
 import { useVideoControls } from '../composables/useVideoControls'
 import { useFeedStore, type FeedTab } from '../stores/feed'
 import { useAuthStore } from '../stores/auth'
@@ -124,13 +121,46 @@ const handleShare = (item: any) => {
 }
 
 const handleOpenNotes = (videoId: number) => {
+  if (notePanelOpen.value && noteVideoId.value === videoId) {
+    notePanelOpen.value = false
+    stopTimePoll()
+    return
+  }
+  commentDrawerOpen.value = false
+  learnPanelOpen.value = false
   noteVideoId.value = videoId
   notePanelOpen.value = true
   fetchFeedNoteTimestamps(videoId)
   startTimePoll()
 }
 
+const handleOpenComments = (videoId: number) => {
+  if (commentDrawerOpen.value && commentVideoId.value === videoId) {
+    commentDrawerOpen.value = false
+    return
+  }
+  notePanelOpen.value = false
+  learnPanelOpen.value = false
+  commentVideoId.value = videoId
+  commentDrawerOpen.value = true
+}
+
+const handleCloseNotes = () => {
+  notePanelOpen.value = false
+  stopTimePoll()
+}
+
+const handleCloseLearn = () => {
+  learnPanelOpen.value = false
+}
+
 const handleOpenLearn = (videoId: number) => {
+  if (learnPanelOpen.value && learnVideoId.value === videoId) {
+    learnPanelOpen.value = false
+    return
+  }
+  commentDrawerOpen.value = false
+  notePanelOpen.value = false
   learnVideoId.value = videoId
   learnPanelOpen.value = true
 }
@@ -185,13 +215,17 @@ const { isMuted } = useVideoControls((key) => {
   if (key === 'c' || key === 'C') {
     const id = items.value[activeIndex.value]?.video_id
     if (id) {
-      commentVideoId.value = id
-      commentDrawerOpen.value = true
+      handleOpenComments(id)
     }
   }
 })
 
 watch(activeIndex, (newIdx, oldIdx) => {
+  if (newIdx !== oldIdx) {
+    commentDrawerOpen.value = false
+    notePanelOpen.value = false
+    learnPanelOpen.value = false
+  }
   if (newIdx >= items.value.length - 3 && hasMore.value && !isLoading.value) {
     feedStore.loadMore(activeTab.value)
   }
@@ -286,8 +320,7 @@ const onKeyDown = (e: KeyboardEvent) => {
     case 'C':
       const id = items.value[activeIndex.value]?.video_id
       if (id) {
-        commentVideoId.value = id
-        commentDrawerOpen.value = true
+        handleOpenComments(id)
       }
       break
     case 'n':
@@ -316,7 +349,7 @@ const onKeyDown = (e: KeyboardEvent) => {
   <div class="feed-page">
     <FeedTabBar :activeTab="activeTab" @update:tab="onTabChange" />
 
-    <div class="feed-swiper-wrap" :class="{ 'compressed': commentDrawerOpen || notePanelOpen }">
+    <div class="feed-swiper-wrap">
       <FeedSwiper
         ref="swiperRef"
         :items="items"
@@ -331,8 +364,19 @@ const onKeyDown = (e: KeyboardEvent) => {
             :muted="isMuted"
             :noteTimestamps="noteTimestamps"
             :noteCount="noteCount"
-            @openComments="(videoId) => { commentVideoId = videoId; commentDrawerOpen = true }"
+            :commentOpen="commentDrawerOpen && commentVideoId === item?.video_id"
+            :commentVideoId="commentVideoId"
+            :noteOpen="notePanelOpen && noteVideoId === item?.video_id"
+            :noteVideoId="noteVideoId"
+            :currentTime="feedPlayerTime"
+            :learnOpen="learnPanelOpen && learnVideoId === item?.video_id"
+            :learnVideoId="learnVideoId"
+            @openComments="(videoId) => handleOpenComments(videoId)"
+            @closeComments="commentDrawerOpen = false"
             @openNotes="(videoId) => handleOpenNotes(videoId)"
+            @closeNotes="handleCloseNotes"
+            @closeLearn="handleCloseLearn"
+            @noteSeek="(ts) => handleFeedNoteSeek(ts)"
             @share="(videoId: number) => handleShare(item)"
             @openLearn="(videoId: number) => handleOpenLearn(videoId)"
             :wordbankStatus="item.wordbank_status"
@@ -344,20 +388,6 @@ const onKeyDown = (e: KeyboardEvent) => {
       <BottomNav v-if="isMobile" />
     </div>
 
-    <CommentDrawer
-      v-model="commentDrawerOpen"
-      :videoId="commentVideoId"
-      seamless
-    />
-
-    <NotePanel
-      v-model="notePanelOpen"
-      :videoId="noteVideoId"
-      :currentTime="feedPlayerTime"
-      position="right"
-      @seek="handleFeedNoteSeek"
-    />
-
     <ShareMenu
       v-model="shareMenuOpen"
       :videoId="shareVideoId"
@@ -366,11 +396,6 @@ const onKeyDown = (e: KeyboardEvent) => {
       :authorName="shareAuthorName"
     />
 
-    <LearnPanel
-      v-model="learnPanelOpen"
-      :videoId="learnVideoId"
-      :videoPlayerRef="getActivePlayer()"
-    />
   </div>
 </template>
 
@@ -396,8 +421,5 @@ const onKeyDown = (e: KeyboardEvent) => {
     padding-bottom: var(--bottom-nav-height, 60px);
   }
 
-  &.compressed {
-    width: 70%;
-  }
 }
 </style>

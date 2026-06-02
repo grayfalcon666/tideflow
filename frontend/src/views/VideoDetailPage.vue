@@ -165,21 +165,27 @@ onMounted(async () => {
       />
 
       <CommentDrawer
-        v-model="showDrawer"
+        :open="showDrawer"
         :videoId="videoId"
+        mode="dialog"
+        @close="showDrawer = false"
       />
 
       <NotePanel
-        v-model="showNotePanel"
+        :open="showNotePanel"
         :videoId="videoId"
         :currentTime="playerCurrentTime"
+        mode="dialog"
         @seek="handleNoteSeek"
+        @close="showNotePanel = false"
       />
 
       <LearnPanel
-        v-model="showLearnPanel"
+        :open="showLearnPanel"
         :videoId="videoId"
         :videoPlayerRef="videoPlayerRef"
+        mode="dialog"
+        @close="showLearnPanel = false"
       />
     </template>
   </div>

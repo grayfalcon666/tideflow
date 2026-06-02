@@ -1,18 +1,29 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import * as commentService from '../../services/comment'
 import type { Comment } from '../../types'
 import { normalizeComment } from '../../types'
 import TFIcon from '../common/TFIcon.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   videoId: number
+  open: boolean
+  mode?: 'inline' | 'dialog'
+}>(), {
+  mode: 'inline',
+})
+
+const emit = defineEmits<{
+  close: []
 }>()
 
-const router = useRouter()
+const dialogModel = computed({
+  get: () => props.open,
+  set: (val: boolean) => { if (!val) emit('close') },
+})
 
-const modelValue = defineModel<boolean>({ default: false })
+const router = useRouter()
 
 const comments = ref<Comment[]>([])
 const cursor = ref<string | null>(null)
@@ -150,38 +161,31 @@ const loadMore = () => {
   }
 }
 
-watch(modelValue, (val) => {
+// Load comments when opened; clear when closed
+watch(() => props.open, (val) => {
   if (val) {
     fetchComments(true)
+  } else {
+    comments.value = []
+    cursor.value = null
+    hasMore.value = true
+    replyingTo.value = null
+    inputText.value = ''
   }
 })
 </script>
 
 <template>
-  <q-dialog
-    v-model="modelValue"
-    position="right"
-    class="comment-drawer"
-  >
-    <div
-      class="drawer-inner"
-      style="width: 450px; height: 100svh; max-width: 80vw; background: var(--bg-surface);"
-    >
+  <q-dialog v-if="mode === 'dialog'" v-model="dialogModel" position="right">
+    <div class="drawer-inner drawer-dialog-inner">
       <div class="drawer-header">
         <span class="drawer-title">评论</span>
-        <div class="close-btn" @click="modelValue = false">
+        <div class="close-btn" @click="emit('close')">
           <TFIcon name="close" :size="20" />
         </div>
       </div>
-
       <div class="comment-list" @scroll="loadMore">
-        <!-- Level 1: root comments (root_id === 0) -->
-        <div
-          v-for="c in comments"
-          :key="c.comment_id"
-          class="comment-item"
-        >
-          <!-- root comment body -->
+        <div v-for="c in comments" :key="c.comment_id" class="comment-item">
           <div class="comment-row">
             <q-avatar size="36px" class="clickable-avatar" @click="goToUser(c.author_id)">
               <img :src="c.avatar_url || '/default-avatar.svg'" />
@@ -198,18 +202,9 @@ watch(modelValue, (val) => {
               </div>
             </div>
           </div>
-
-          <!-- Level 2: replies (collapsed by default) -->
           <div v-if="c.reply_count > 0" class="replies-section">
-            <div
-              v-if="c.showReplies && c.replies"
-              class="replies-list"
-            >
-              <div
-                v-for="r in c.replies"
-                :key="r.comment_id"
-                class="comment-row reply-row"
-              >
+            <div v-if="c.showReplies && c.replies" class="replies-list">
+              <div v-for="r in c.replies" :key="r.comment_id" class="comment-row reply-row">
                 <q-avatar size="28px" class="clickable-avatar" @click="goToUser(r.author_id)">
                   <img :src="r.avatar_url || '/default-avatar.svg'" />
                 </q-avatar>
@@ -227,15 +222,11 @@ watch(modelValue, (val) => {
                 </div>
               </div>
             </div>
-            <div
-              class="toggle-replies"
-              @click="toggleReplies(c)"
-            >
+            <div class="toggle-replies" @click="toggleReplies(c)">
               <span>{{ c.showReplies ? '收起' : `展开${c.reply_count}条回复` }}</span>
             </div>
           </div>
         </div>
-
         <div v-if="loading" class="loading-more">
           <q-spinner color="accent" size="24px" />
         </div>
@@ -245,7 +236,6 @@ watch(modelValue, (val) => {
           <span>还没有评论</span>
         </div>
       </div>
-
       <div class="input-bar">
         <div v-if="replyingTo" class="reply-indicator">
           <span>回复 @{{ replyingTo.username }}</span>
@@ -254,36 +244,103 @@ watch(modelValue, (val) => {
           </div>
         </div>
         <div class="input-row">
-          <textarea
-            ref="inputEl"
-            v-model="inputText"
-            placeholder="发表想法..."
-            rows="1"
-            class="comment-input"
-            @keydown.enter.ctrl="sendComment"
-          />
-          <div
-            class="send-btn"
-            :class="{ disabled: !inputText.trim() || sending }"
-            @click="sendComment"
-          >
+          <textarea ref="inputEl" v-model="inputText" placeholder="发表想法..." rows="1" class="comment-input" @keydown.enter.ctrl="sendComment" />
+          <div class="send-btn" :class="{ disabled: !inputText.trim() || sending }" @click="sendComment">
             <TFIcon name="send" :size="20" color="var(--accent)" />
           </div>
         </div>
       </div>
     </div>
   </q-dialog>
+
+  <div v-else class="drawer-inner">
+    <div class="drawer-header">
+      <span class="drawer-title">评论</span>
+      <div class="close-btn" @click="emit('close')">
+        <TFIcon name="close" :size="20" />
+      </div>
+    </div>
+    <div class="comment-list" @scroll="loadMore">
+      <div v-for="c in comments" :key="c.comment_id" class="comment-item">
+        <div class="comment-row">
+          <q-avatar size="36px" class="clickable-avatar" @click="goToUser(c.author_id)">
+            <img :src="c.avatar_url || '/default-avatar.svg'" />
+          </q-avatar>
+          <div class="comment-body">
+            <div class="comment-meta">
+              <span class="comment-username">{{ c.username }}</span>
+              <span class="comment-time">{{ timeAgo(c.created_at) }}</span>
+            </div>
+            <p class="comment-content">{{ c.content }}</p>
+            <div class="comment-actions">
+              <span class="action-item" @click="startReply(c)">回复</span>
+              <span v-if="c.is_mine" class="action-item delete" @click="deleteComment(c)">删除</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="c.reply_count > 0" class="replies-section">
+          <div v-if="c.showReplies && c.replies" class="replies-list">
+            <div v-for="r in c.replies" :key="r.comment_id" class="comment-row reply-row">
+              <q-avatar size="28px" class="clickable-avatar" @click="goToUser(r.author_id)">
+                <img :src="r.avatar_url || '/default-avatar.svg'" />
+              </q-avatar>
+              <div class="comment-body">
+                <div class="comment-meta">
+                  <span class="comment-username">{{ r.username }}</span>
+                  <span v-if="r.parent_id !== r.root_id" class="reply-target">回复 @{{ usernameMap[r.parent_id] || '' }}</span>
+                  <span class="comment-time">{{ timeAgo(r.created_at) }}</span>
+                </div>
+                <p class="comment-content">{{ r.content }}</p>
+                <div class="comment-actions">
+                  <span class="action-item" @click="startReply(r)">回复</span>
+                  <span v-if="r.is_mine" class="action-item delete" @click="deleteComment(r)">删除</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="toggle-replies" @click="toggleReplies(c)">
+            <span>{{ c.showReplies ? '收起' : `展开${c.reply_count}条回复` }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-if="loading" class="loading-more">
+        <q-spinner color="accent" size="24px" />
+      </div>
+      <div v-if="!hasMore && comments.length" class="no-more">没有更多了</div>
+      <div v-if="!loading && !comments.length" class="empty-state">
+        <TFIcon name="chat_bubble_outline" :size="32" color="var(--text-secondary)" />
+        <span>还没有评论</span>
+      </div>
+    </div>
+    <div class="input-bar">
+      <div v-if="replyingTo" class="reply-indicator">
+        <span>回复 @{{ replyingTo.username }}</span>
+        <div class="cancel-reply-btn" @click="cancelReply">
+          <TFIcon name="close" :size="14" />
+        </div>
+      </div>
+      <div class="input-row">
+        <textarea ref="inputEl" v-model="inputText" placeholder="发表想法..." rows="1" class="comment-input" @keydown.enter.ctrl="sendComment" />
+        <div class="send-btn" :class="{ disabled: !inputText.trim() || sending }" @click="sendComment">
+          <TFIcon name="send" :size="20" color="var(--accent)" />
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped lang="scss">
-.comment-drawer {
-  align-items: stretch;
-}
-
 .drawer-inner {
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: var(--bg-surface);
+}
+
+.drawer-dialog-inner {
+  width: 450px;
+  height: 100svh;
+  max-width: 80vw;
 }
 
 .drawer-header {

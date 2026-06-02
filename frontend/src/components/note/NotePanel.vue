@@ -5,19 +5,24 @@ import type { Note, RawNote } from '../../types'
 import { normalizeNote } from '../../types'
 import TFIcon from '../common/TFIcon.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   videoId: number
   currentTime: number
-  position?: 'bottom' | 'right'
-}>()
+  open: boolean
+  mode?: 'inline' | 'dialog'
+}>(), {
+  mode: 'inline',
+})
 
 const emit = defineEmits<{
   seek: [timestamp: number]
+  close: []
 }>()
 
-const position = computed(() => props.position ?? 'bottom')
-
-const modelValue = defineModel<boolean>({ default: false })
+const dialogModel = computed({
+  get: () => props.open,
+  set: (val: boolean) => { if (!val) emit('close') },
+})
 
 const notes = ref<Note[]>([])
 const cursor = ref<string | null>(null)
@@ -26,7 +31,6 @@ const loading = ref(false)
 const sending = ref(false)
 const inputText = ref('')
 const inputTimestamp = ref(0)
-const showTimePicker = ref(false)
 
 const fetchNotes = async (reset = false) => {
   if (loading.value) return
@@ -65,7 +69,6 @@ const sendNote = async () => {
     const raw = resp.data.data
     if (!raw) return
     const note = normalizeNote(raw)
-    // Insert at correct position (sorted by timestamp)
     const idx = notes.value.findIndex(n => n.timestamp > note.timestamp)
     if (idx === -1) {
       notes.value.push(note)
@@ -90,10 +93,8 @@ const handleNoteClick = (note: Note) => {
 
 const captureTimestamp = () => {
   inputTimestamp.value = props.currentTime
-  showTimePicker.value = false
 }
 
-// Scroll to bottom
 const noteListEl = ref<HTMLDivElement>()
 const handleScroll = () => {
   if (!noteListEl.value) return
@@ -103,33 +104,34 @@ const handleScroll = () => {
   }
 }
 
-// Fetch notes when panel opens
-watch(modelValue, (val) => {
+watch(() => props.open, (val) => {
   if (val) {
     inputTimestamp.value = props.currentTime
     fetchNotes(true)
+  } else {
+    notes.value = []
+    cursor.value = null
+    hasMore.value = true
+    inputText.value = ''
   }
 })
 </script>
 
 <template>
-  <q-dialog v-model="modelValue" :position="position" :full-width="position === 'bottom'" :seamless="position === 'right'" class="note-dialog">
-    <q-card class="note-panel" :class="{ 'note-panel-right': position === 'right' }" flat>
-      <div class="note-panel-inner" :class="{ 'note-panel-inner-right': position === 'right' }">
-        <!-- Header -->
+  <q-dialog v-if="mode === 'dialog'" v-model="dialogModel" position="right" seamless class="note-dialog">
+    <q-card class="note-panel note-panel-dialog" flat>
+      <div class="note-panel-inner note-panel-inner-dialog">
         <div class="panel-header">
           <div class="panel-header-bar" />
           <div class="panel-header-row">
             <span class="panel-title">时间轴笔记</span>
             <span v-if="notes.length" class="note-count">{{ notes.length }}</span>
             <div class="spacer" />
-            <button class="close-btn" @click="modelValue = false">
+            <button class="close-btn" @click="emit('close')">
               <TFIcon name="close" :size="20" color="var(--text-secondary)" />
             </button>
           </div>
         </div>
-
-        <!-- Add note form -->
         <div class="add-note-section">
           <div class="timestamp-row">
             <span class="timestamp-label">定位时间</span>
@@ -140,69 +142,35 @@ watch(modelValue, (val) => {
             </button>
           </div>
           <div class="add-note-row">
-            <textarea
-              v-model="inputText"
-              :maxlength="2000"
-              class="note-textarea"
-              placeholder="写下你的笔记…"
-              rows="2"
-              @keydown.enter.exact.prevent="sendNote()"
-            />
-            <button
-              class="send-btn"
-              :disabled="!inputText.trim() || sending"
-              @click="sendNote"
-            >
-              发送
-            </button>
+            <textarea v-model="inputText" :maxlength="2000" class="note-textarea" placeholder="写下你的笔记…" rows="2" @keydown.enter.exact.prevent="sendNote()" />
+            <button class="send-btn" :disabled="!inputText.trim() || sending" @click="sendNote">发送</button>
           </div>
           <div class="note-char-count">{{ inputText.length }}/2000</div>
         </div>
-
-        <!-- Note list -->
-        <div
-          ref="noteListEl"
-          class="note-list"
-          @scroll="handleScroll"
-        >
+        <div ref="noteListEl" class="note-list" @scroll="handleScroll">
           <div v-if="loading && notes.length === 0" class="loading-state">
             <q-spinner color="accent" size="24px" />
           </div>
-
           <div v-else-if="notes.length === 0" class="empty-state">
             <TFIcon name="sticky_note_2" :size="40" color="var(--text-muted)" />
             <p>还没有时间轴笔记</p>
           </div>
-
           <template v-else>
-            <div
-              v-for="note in notes"
-              :key="note.note_id"
-              class="note-item"
-              @click="handleNoteClick(note)"
-            >
+            <div v-for="note in notes" :key="note.note_id" class="note-item" @click="handleNoteClick(note)">
               <div class="note-item-left">
                 <div class="note-timestamp-badge">{{ note.formatted_time }}</div>
               </div>
               <div class="note-item-right">
                 <div class="note-item-header">
                   <span class="note-author">{{ note.username }}</span>
-                  <span
-                    v-if="note.is_mine"
-                    class="note-mine-tag"
-                  >我</span>
+                  <span v-if="note.is_mine" class="note-mine-tag">我</span>
                 </div>
                 <div class="note-content">{{ note.content }}</div>
               </div>
-              <button
-                v-if="note.is_mine"
-                class="note-delete-btn"
-                @click.stop="deleteNoteHandler(note)"
-              >
+              <button v-if="note.is_mine" class="note-delete-btn" @click.stop="deleteNoteHandler(note)">
                 <TFIcon name="delete" :size="16" color="var(--text-muted)" />
               </button>
             </div>
-
             <div v-if="loading && notes.length > 0" class="load-more">
               <q-spinner color="accent" size="20px" />
             </div>
@@ -211,6 +179,65 @@ watch(modelValue, (val) => {
       </div>
     </q-card>
   </q-dialog>
+
+  <div v-else class="note-panel note-panel-inline">
+    <div class="note-panel-inner note-panel-inner-inline">
+      <div class="panel-header">
+        <div class="panel-header-row">
+          <span class="panel-title">时间轴笔记</span>
+          <span v-if="notes.length" class="note-count">{{ notes.length }}</span>
+          <div class="spacer" />
+          <button class="close-btn" @click="emit('close')">
+            <TFIcon name="close" :size="20" color="var(--text-secondary)" />
+          </button>
+        </div>
+      </div>
+      <div class="add-note-section">
+        <div class="timestamp-row">
+          <span class="timestamp-label">定位时间</span>
+          <button class="timestamp-btn" @click="captureTimestamp">
+            <TFIcon name="access_time" :size="16" color="var(--accent)" />
+            <span class="timestamp-value">{{ inputTimestamp.toFixed(0) }}s</span>
+            <span class="timestamp-hint">点击设为当前播放时间</span>
+          </button>
+        </div>
+        <div class="add-note-row">
+          <textarea v-model="inputText" :maxlength="2000" class="note-textarea" placeholder="写下你的笔记…" rows="2" @keydown.enter.exact.prevent="sendNote()" />
+          <button class="send-btn" :disabled="!inputText.trim() || sending" @click="sendNote">发送</button>
+        </div>
+        <div class="note-char-count">{{ inputText.length }}/2000</div>
+      </div>
+      <div ref="noteListEl" class="note-list" @scroll="handleScroll">
+        <div v-if="loading && notes.length === 0" class="loading-state">
+          <q-spinner color="accent" size="24px" />
+        </div>
+        <div v-else-if="notes.length === 0" class="empty-state">
+          <TFIcon name="sticky_note_2" :size="40" color="var(--text-muted)" />
+          <p>还没有时间轴笔记</p>
+        </div>
+        <template v-else>
+          <div v-for="note in notes" :key="note.note_id" class="note-item" @click="handleNoteClick(note)">
+            <div class="note-item-left">
+              <div class="note-timestamp-badge">{{ note.formatted_time }}</div>
+            </div>
+            <div class="note-item-right">
+              <div class="note-item-header">
+                <span class="note-author">{{ note.username }}</span>
+                <span v-if="note.is_mine" class="note-mine-tag">我</span>
+              </div>
+              <div class="note-content">{{ note.content }}</div>
+            </div>
+            <button v-if="note.is_mine" class="note-delete-btn" @click.stop="deleteNoteHandler(note)">
+              <TFIcon name="delete" :size="16" color="var(--text-muted)" />
+            </button>
+          </div>
+          <div v-if="loading && notes.length > 0" class="load-more">
+            <q-spinner color="accent" size="20px" />
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -219,27 +246,30 @@ watch(modelValue, (val) => {
 }
 
 .note-panel {
-  border-radius: 16px 16px 0 0;
-  max-height: 70svh;
   background: var(--bg-base);
 
-  &.note-panel-right {
+  &.note-panel-dialog {
     border-radius: 0;
-    max-height: none;
     width: 400px;
     max-width: 80vw;
     height: 100svh;
+  }
+
+  &.note-panel-inline {
+    height: 100%;
   }
 }
 
 .note-panel-inner {
   display: flex;
   flex-direction: column;
-  max-height: 70svh;
 
-  &.note-panel-inner-right {
-    max-height: none;
+  &.note-panel-inner-dialog {
     height: 100svh;
+  }
+
+  &.note-panel-inner-inline {
+    height: 100%;
   }
 }
 
@@ -287,7 +317,6 @@ watch(modelValue, (val) => {
   display: flex;
 }
 
-// Add note section
 .add-note-section {
   padding: 8px 16px 12px;
   border-bottom: 1px solid var(--border-color);
@@ -383,7 +412,6 @@ watch(modelValue, (val) => {
   margin-top: 4px;
 }
 
-// Note list
 .note-list {
   flex: 1;
   overflow-y: auto;

@@ -11,15 +11,23 @@ import LearnStepResult from './LearnStepResult.vue'
 import LearnCaptionDrawer from './LearnCaptionDrawer.vue'
 import TFIcon from '../common/TFIcon.vue'
 
-const props = defineProps<{
-  modelValue: boolean
+const props = withDefaults(defineProps<{
+  open: boolean
   videoId: number
   videoPlayerRef?: any
-}>()
+  mode?: 'inline' | 'dialog'
+}>(), {
+  mode: 'inline',
+})
 
 const emit = defineEmits<{
-  'update:modelValue': [val: boolean]
+  close: []
 }>()
+
+const dialogModel = computed({
+  get: () => props.open,
+  set: (val: boolean) => { if (!val) emit('close') },
+})
 
 // Step state machine
 type Step = 'select' | 'preview' | 'spelling' | 'result'
@@ -41,7 +49,7 @@ const captionWord = ref('')
 const showExitConfirm = ref(false)
 
 const closePanel = () => {
-  emit('update:modelValue', false)
+  emit('close')
 }
 
 const goBack = () => {
@@ -117,12 +125,6 @@ const handleContinueNextBatch = () => {
   step.value = 'preview'
 }
 
-// Panel width
-const panelWidth = computed(() => {
-  if (typeof window !== 'undefined' && window.innerWidth < 768) return '100vw'
-  return '520px'
-})
-
 // Title
 const panelTitle = computed(() => {
   switch (step.value) {
@@ -135,16 +137,8 @@ const panelTitle = computed(() => {
 </script>
 
 <template>
-  <q-dialog
-    :model-value="modelValue"
-    @update:model-value="emit('update:modelValue', $event)"
-    position="right"
-    :max-width="panelWidth"
-    :max-height="'100vh'"
-    seamless
-  >
-    <div class="learn-panel">
-      <!-- Header -->
+  <q-dialog v-if="mode === 'dialog'" v-model="dialogModel" position="right" seamless>
+    <div class="learn-panel learn-panel-dialog">
       <div class="panel-header">
         <button v-if="step !== 'select'" class="back-btn" @click="goBack">
           <TFIcon name="arrow_back" :size="20" />
@@ -158,13 +152,11 @@ const panelTitle = computed(() => {
         </button>
       </div>
 
-      <!-- Body -->
       <div class="panel-body">
         <LearnStepSelectList
           v-if="step === 'select'"
           @select="handleListSelect"
         />
-
         <LearnStepWordList
           v-else-if="step === 'preview' && selectedList"
           :videoId="videoId"
@@ -173,23 +165,18 @@ const panelTitle = computed(() => {
           @start="handleStartLearning"
           @openCaptions="handleOpenCaptions"
         />
-
-        <!-- Spell mode -->
         <LearnStepSpelling
           v-else-if="step === 'spelling' && learnMode === 'spell'"
           :words="spellingWords"
           @done="(total, resp) => handleSpellingDone(total, resp)"
           @openCaptions="handleOpenCaptions"
         />
-
-        <!-- Type mode -->
         <LearnStepTyping
           v-else-if="step === 'spelling' && learnMode === 'type'"
           :words="spellingWords"
           @done="(total) => handleSpellingDone(total)"
           @openCaptions="handleOpenCaptions"
         />
-
         <LearnStepResult
           v-else-if="step === 'result'"
           :total="totalWordsCompleted"
@@ -201,7 +188,6 @@ const panelTitle = computed(() => {
         />
       </div>
 
-      <!-- Exit confirm dialog -->
       <q-dialog v-model="showExitConfirm" persistent>
         <q-card class="exit-confirm-card">
           <q-card-section class="confirm-body">
@@ -214,13 +200,7 @@ const panelTitle = computed(() => {
         </q-card>
       </q-dialog>
 
-      <!-- Caption drawer -->
-      <q-dialog
-        v-model="showCaptionDrawer"
-        position="right"
-        :max-width="420"
-        seamless
-      >
+      <q-dialog v-model="showCaptionDrawer" position="right" :max-width="420" seamless>
         <LearnCaptionDrawer
           v-if="captionWord"
           :videoId="videoId"
@@ -231,21 +211,101 @@ const panelTitle = computed(() => {
       </q-dialog>
     </div>
   </q-dialog>
+
+  <div v-else class="learn-panel learn-panel-inline">
+    <div class="panel-header">
+      <button v-if="step !== 'select'" class="back-btn" @click="goBack">
+        <TFIcon name="arrow_back" :size="20" />
+      </button>
+      <div class="header-title">
+        <TFIcon name="school" :size="20" color="#1ed760" />
+        <span>{{ panelTitle }}</span>
+      </div>
+      <button class="close-btn" @click="step === 'spelling' ? (showExitConfirm = true) : closePanel()">
+        <TFIcon name="close" :size="20" />
+      </button>
+    </div>
+
+    <div class="panel-body">
+      <LearnStepSelectList
+        v-if="step === 'select'"
+        @select="handleListSelect"
+      />
+      <LearnStepWordList
+        v-else-if="step === 'preview' && selectedList"
+        :videoId="videoId"
+        :list="selectedList"
+        :chunkSize="chunkSize"
+        @start="handleStartLearning"
+        @openCaptions="handleOpenCaptions"
+      />
+      <LearnStepSpelling
+        v-else-if="step === 'spelling' && learnMode === 'spell'"
+        :words="spellingWords"
+        @done="(total, resp) => handleSpellingDone(total, resp)"
+        @openCaptions="handleOpenCaptions"
+      />
+      <LearnStepTyping
+        v-else-if="step === 'spelling' && learnMode === 'type'"
+        :words="spellingWords"
+        @done="(total) => handleSpellingDone(total)"
+        @openCaptions="handleOpenCaptions"
+      />
+      <LearnStepResult
+        v-else-if="step === 'result'"
+        :total="totalWordsCompleted"
+        :dailyWordsToday="lastCommitResp?.daily_words_today ?? 0"
+        :hasMoreBatches="hasMoreBatches"
+        :mode="learnMode"
+        @continueNextBatch="handleContinueNextBatch"
+        @close="closePanel"
+      />
+    </div>
+
+    <q-dialog v-model="showExitConfirm" persistent>
+      <q-card class="exit-confirm-card">
+        <q-card-section class="confirm-body">
+          <p>{{ learnMode === 'spell' ? '学习进度不会保存，确定退出吗？' : '确定退出跟打练习吗？' }}</p>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat no-caps label="取消" @click="cancelExit" />
+          <q-btn flat no-caps label="确定退出" color="negative" @click="confirmExit" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="showCaptionDrawer" position="right" :max-width="420" seamless>
+      <LearnCaptionDrawer
+        v-if="captionWord"
+        :videoId="videoId"
+        :word="captionWord"
+        @seekTo="handleSeekTo"
+        @close="showCaptionDrawer = false"
+      />
+    </q-dialog>
+  </div>
 </template>
 
 <style scoped lang="scss">
 .learn-panel {
-  width: 520px;
-  max-width: 100vw;
-  height: 100vh;
   background: #121212;
   display: flex;
   flex-direction: column;
-  box-shadow: rgba(0,0,0,0.5) 0px 8px 24px;
 
-  @media (max-width: 768px) {
-    width: 100vw;
-    height: 100svh;
+  &.learn-panel-dialog {
+    width: 520px;
+    max-width: 100vw;
+    height: 100vh;
+    box-shadow: rgba(0,0,0,0.5) 0px 8px 24px;
+
+    @media (max-width: 768px) {
+      width: 100vw;
+      height: 100svh;
+    }
+  }
+
+  &.learn-panel-inline {
+    height: 100%;
   }
 }
 
