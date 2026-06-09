@@ -17,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"tideflow/internal/models"
+	"tideflow/internal/mq"
 	"tideflow/internal/repository"
 	"tideflow/pkg/media"
 	infraredis "tideflow/infra/redis"
@@ -47,10 +48,11 @@ type VideoService struct {
 	bigVThresh int
 	UploadDir string
 	jwtSecret []byte
+	mq       *mq.MQ
 }
 
-func NewVideoService(repo *repository.Repository, cache *infraredis.Cache, bigVThresh int, uploadDir string, jwtSecret string) *VideoService {
-	return &VideoService{repo: repo, cache: cache, bigVThresh: bigVThresh, UploadDir: uploadDir, jwtSecret: []byte(jwtSecret)}
+func NewVideoService(repo *repository.Repository, cache *infraredis.Cache, bigVThresh int, uploadDir string, jwtSecret string, mqInstance *mq.MQ) *VideoService {
+	return &VideoService{repo: repo, cache: cache, bigVThresh: bigVThresh, UploadDir: uploadDir, jwtSecret: []byte(jwtSecret), mq: mqInstance}
 }
 
 func (s *VideoService) UploadVideo(ctx context.Context, file *multipart.FileHeader) (string, *media.VideoMeta, error) {
@@ -142,6 +144,9 @@ func (s *VideoService) PublishVideo(ctx context.Context, authorID uint, username
 		Status:     "pending",
 	}
 	s.repo.CreateOutboxMsg(ctx, outbox)
+
+	// Initialize Redis view count for the new video
+	s.InitViewCount(ctx, video.ID)
 
 	return video.ID, nil
 }
@@ -322,16 +327,47 @@ func (s *VideoService) RecordView(ctx context.Context, videoID uint, userID uint
 		return false, nil
 	}
 
-	// 播放量 INCR
+	// 播放量 INCR（仅 Redis，不操作 DB）
 	rdb.Incr(ctx, infraredis.ViewCount(videoID))
 
-	// 记录待更新名单 SADD dirty_videos
-	rdb.SAdd(ctx, infraredis.DirtyVideos(), videoID)
-
-	// 删除视频实体缓存（L1 + L2），确保下次拉取到最新播放量
-	s.cache.InvalidateVideo(videoID)
+	// 发布热度增量事件（播放量权重 +1）
+	if s.mq != nil {
+		popEvent := mq.PopularityEvent{
+			EventID:    fmt.Sprintf("%d-%d", videoID, time.Now().UnixNano()),
+			VideoID:    videoID,
+			Change:     1,
+			OccurredAt: time.Now().UnixMilli(),
+		}
+		s.mq.Publish(ctx, "video.popularity.events", "video.popularity.update", popEvent)
+	}
 
 	return true, nil
+}
+
+// GetViewCount returns the view count for a video. Reads from Redis first; falls back to DB and backfills.
+func (s *VideoService) GetViewCount(ctx context.Context, videoID uint) (int64, error) {
+	rdb := s.cache.GetRedis()
+	key := infraredis.ViewCount(videoID)
+
+	val, err := rdb.Get(ctx, key).Int64()
+	if err == nil {
+		return val, nil
+	}
+
+	// Redis miss: read from DB and backfill
+	video, err := s.repo.GetVideoByID(ctx, videoID)
+	if err != nil {
+		return 0, err
+	}
+
+	rdb.Set(ctx, key, video.ViewCount, 0)
+	return video.ViewCount, nil
+}
+
+// InitViewCount initializes the Redis view count for a newly published video.
+func (s *VideoService) InitViewCount(ctx context.Context, videoID uint) {
+	rdb := s.cache.GetRedis()
+	rdb.Set(ctx, infraredis.ViewCount(videoID), 0, 0)
 }
 
 func generateFilename(orig string) string {

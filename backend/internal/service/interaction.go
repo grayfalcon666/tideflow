@@ -56,7 +56,7 @@ func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint
 	popEvent := mq.PopularityEvent{
 		EventID:   fmt.Sprintf("%d-%d", videoID, time.Now().UnixNano()),
 		VideoID:   videoID,
-		Change:    1,
+		Change:    3,
 		OccurredAt: time.Now().UnixMilli(),
 	}
 	s.mq.Publish(ctx, "video.popularity.events", "video.popularity.update", popEvent)
@@ -92,7 +92,7 @@ func (s *InteractionService) UnlikeVideo(ctx context.Context, userID, videoID ui
 	popEvent := mq.PopularityEvent{
 		EventID:   fmt.Sprintf("%d-%d", videoID, time.Now().UnixNano()),
 		VideoID:   videoID,
-		Change:    -1,
+		Change:    -3,
 		OccurredAt: time.Now().UnixMilli(),
 	}
 	s.mq.Publish(ctx, "video.popularity.events", "video.popularity.update", popEvent)

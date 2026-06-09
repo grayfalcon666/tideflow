@@ -1118,7 +1118,7 @@ func (w *NotificationWorker) handleFollowNotification(ctx context.Context, d amq
 	d.Ack(false)
 }
 
-// ViewCountWorker 定时将 Redis 中的播放量增量合并到 MySQL
+// ViewCountWorker 定时将 Redis 中的播放量同步到 MySQL
 type ViewCountWorker struct {
 	rdb  *goredis.Client
 	repo *repository.Repository
@@ -1128,54 +1128,87 @@ func NewViewCountWorker(rdb *goredis.Client, repo *repository.Repository) *ViewC
 	return &ViewCountWorker{rdb: rdb, repo: repo}
 }
 
-// SMEMBERS dirty_videos -> 遍历 -> GET count:views:{id} -> UPDATE -> DECRBY -> SREM -> DEL if <= 0
+// FlushViewCounts SCAN 遍历所有 video:play:count:* key，对比 DB 差值写入。
 func (w *ViewCountWorker) FlushViewCounts(ctx context.Context) {
-	// 1. 提取待处理名单
-	ids, err := w.rdb.SMembers(ctx, redis.DirtyVideos()).Result()
-	if err != nil || len(ids) == 0 {
-		return
-	}
-
-	for _, idStr := range ids {
-		var videoID uint
-		if _, err := fmt.Sscanf(idStr, "%d", &videoID); err != nil {
-			continue
-		}
-
-		key := redis.ViewCount(videoID)
-
-		// 2. 获取增量数值
-		val, err := w.rdb.Get(ctx, key).Result()
-		if err != nil || val == "" {
-			// 没有计数了，直接移除名单
-			w.rdb.SRem(ctx, redis.DirtyVideos(), idStr)
-			continue
-		}
-
-		var delta int64
-		if _, err := fmt.Sscanf(val, "%d", &delta); err != nil || delta <= 0 {
-			w.rdb.SRem(ctx, redis.DirtyVideos(), idStr)
-			continue
-		}
-
-		// 3. 批量更新到 MySQL
-		if err := w.repo.IncrementViewCount(ctx, videoID, delta); err != nil {
-			log.Printf("FlushViewCounts: failed to update video %d: %v", videoID, err)
-			continue
-		}
-
-		// 4. DECRBY 扣减 Redis 计数
-		newVal, err := w.rdb.DecrBy(ctx, key, delta).Result()
+	pattern := fmt.Sprintf("%s:count:views:*", redis.Version)
+	var cursor uint64
+	for {
+		keys, nextCursor, err := w.rdb.Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
-			log.Printf("FlushViewCounts: failed to DecrBy video %d: %v", videoID, err)
+			log.Printf("FlushViewCounts: scan error: %v", err)
+			return
 		}
 
-		// 5. SREM 移出待处理名单
-		w.rdb.SRem(ctx, redis.DirtyVideos(), idStr)
+		for _, key := range keys {
+			// Extract videoID from key: "v1:count:views:{videoID}"
+			var videoID uint
+			if _, err := fmt.Sscanf(key, redis.Version+":count:views:%d", &videoID); err != nil || videoID == 0 {
+				continue
+			}
 
-		// 6. 如果扣减后 <= 0，DEL 这个 key 释放内存
-		if newVal <= 0 {
-			w.rdb.Del(ctx, key)
+			// Get Redis count
+			redisCount, err := w.rdb.Get(ctx, key).Int64()
+			if err != nil || redisCount <= 0 {
+				continue
+			}
+
+			// Get DB count
+			video, err := w.repo.GetVideoByID(ctx, videoID)
+			if err != nil {
+				continue
+			}
+
+			// Write delta to DB if Redis > DB
+			delta := redisCount - video.ViewCount
+			if delta > 0 {
+				if err := w.repo.IncrementViewCount(ctx, videoID, delta); err != nil {
+					log.Printf("FlushViewCounts: failed to update video %d: %v", videoID, err)
+				}
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
 		}
 	}
+}
+
+// LoadViewCountsToRedis 从 DB 全量加载播放量到 Redis（启动时调用）。
+func (w *ViewCountWorker) LoadViewCountsToRedis(ctx context.Context) {
+	log.Println("LoadViewCountsToRedis: starting full load from DB")
+	var cursor int64
+	batchSize := 500
+	loaded := 0
+
+	for {
+		var videos []*models.Video
+		err := w.repo.DB().WithContext(ctx).
+			Where("deleted_at IS NULL").
+			Order("id ASC").
+			Offset(int(cursor)).
+			Limit(batchSize).
+			Find(&videos).Error
+		if err != nil {
+			log.Printf("LoadViewCountsToRedis: query error: %v", err)
+			return
+		}
+
+		if len(videos) == 0 {
+			break
+		}
+
+		for _, v := range videos {
+			key := redis.ViewCount(v.ID)
+			w.rdb.Set(ctx, key, v.ViewCount, 0)
+			loaded++
+		}
+
+		cursor += int64(len(videos))
+		if len(videos) < batchSize {
+			break
+		}
+	}
+
+	log.Printf("LoadViewCountsToRedis: loaded %d videos", loaded)
 }
