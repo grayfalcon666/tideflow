@@ -15,6 +15,7 @@ const app = createApp(App)
 
 app.use(Quasar, {
   plugins: { Notify, Dialog },
+  config: { dark: true },
 })
 app.use(pinia)
 

@@ -158,6 +158,25 @@ button {
   background: var(--bg-card);
 }
 
+.q-dialog__inner > .q-card {
+  background: var(--bg-elevated) !important;
+  color: var(--text-base) !important;
+  box-shadow: var(--shadow-elevated) !important;
+  border: none !important;
+}
+
+.q-dialog .q-card__section--vert {
+  color: var(--text-secondary) !important;
+}
+
+.q-dialog .q-dialog__title {
+  color: var(--text-base) !important;
+}
+
+.q-dialog__backdrop {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
 .q-item {
   color: var(--text-base);
   min-height: 40px;
