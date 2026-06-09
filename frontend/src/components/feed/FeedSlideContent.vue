@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
 import VideoPlayerContainer from '../video/VideoPlayerContainer.vue'
 import VideoPlayer from '../video/VideoPlayer.vue'
 import SlideAuthorBar from './SlideAuthorBar.vue'
@@ -36,11 +37,43 @@ const emit = defineEmits<{
   (e: 'noteSeek', timestamp: number): void
   (e: 'learnSeek', seconds: number): void
   (e: 'learnPause'): void
+  (e: 'viewReported'): void
+  (e: 'historyReported', videoId: number): void
 }>()
+
+// Visibility tracking for Feed page: ≥50% visible for ≥200ms
+const playerVisible = ref(false)
+let visibleTimer: ReturnType<typeof setTimeout> | null = null
+let observer: IntersectionObserver | null = null
+const slideRoot = ref<HTMLDivElement>()
+
+onMounted(() => {
+  if (!slideRoot.value) return
+  observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0]
+      if (entry && entry.intersectionRatio >= 0.5) {
+        if (!visibleTimer) {
+          visibleTimer = setTimeout(() => { playerVisible.value = true }, 200)
+        }
+      } else {
+        if (visibleTimer) { clearTimeout(visibleTimer); visibleTimer = null }
+        playerVisible.value = false
+      }
+    },
+    { threshold: [0, 0.5] }
+  )
+  observer.observe(slideRoot.value)
+})
+
+onUnmounted(() => {
+  if (visibleTimer) { clearTimeout(visibleTimer); visibleTimer = null }
+  observer?.disconnect()
+})
 </script>
 
 <template>
-  <div class="slide-content" :class="{ 'has-comments': commentOpen }">
+  <div ref="slideRoot" class="slide-content" :class="{ 'has-comments': commentOpen }">
     <div class="slide-left">
       <VideoPlayerContainer class="slide-player-container">
         <VideoPlayer
@@ -54,7 +87,10 @@ const emit = defineEmits<{
           :playToken="item?.play_token"
           :videoId="item?.video_id"
           :noteTimestamps="noteTimestamps"
+          :visible="playerVisible"
           @timeupdate="emit('timeupdate')"
+          @viewReported="emit('viewReported')"
+          @historyReported="(vid) => emit('historyReported', vid)"
         />
       </VideoPlayerContainer>
 

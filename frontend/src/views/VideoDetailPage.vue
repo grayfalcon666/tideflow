@@ -12,6 +12,7 @@ import LearnPanel from '../components/learn/LearnPanel.vue'
 import { useVideoControls } from '../composables/useVideoControls'
 import * as videoService from '../services/video'
 import * as noteService from '../services/note'
+import * as historyApi from '../services/history'
 import { useInteractionStore } from '../stores/interaction'
 import type { VideoDetail, RawNote } from '../types'
 import TFIcon from '../components/common/TFIcon.vue'
@@ -46,6 +47,13 @@ const handleCompletionReported = async (token?: string) => {
   if (!token) return
   try {
     await videoService.recordView(token)
+  } catch {}
+}
+
+const handleHistoryReported = async (videoId: number) => {
+  if (!videoId) return
+  try {
+    await historyApi.recordHistory(videoId)
   } catch {}
 }
 
@@ -135,6 +143,7 @@ onMounted(async () => {
           :noteTimestamps="playerNoteTimestamps"
           @viewReported="handleViewReported(video.play_token)"
           @completionReported="handleCompletionReported(video.play_token)"
+          @historyReported="handleHistoryReported"
           @timeupdate="handleTimeUpdate"
         />
       </VideoPlayerContainer>

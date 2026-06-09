@@ -12,6 +12,8 @@ import { useAuthStore } from '../stores/auth'
 import { useNotificationStore } from '../stores/notification'
 import { useSettingsStore } from '../stores/settings'
 import * as noteService from '../services/note'
+import * as videoService from '../services/video'
+import * as historyApi from '../services/history'
 import type { VideoItem, RawNote } from '../types'
 
 const router = useRouter()
@@ -169,6 +171,16 @@ const handleOpenLearn = (videoId: number) => {
 const handleFeedNoteSeek = (timestamp: number) => {
   const player = getActivePlayer()
   player?.seekTo?.(timestamp)
+}
+
+const handleViewReported = async (token?: string) => {
+  if (!token) return
+  try { await videoService.recordView(token) } catch {}
+}
+
+const handleHistoryReported = async (videoId: number) => {
+  if (!videoId) return
+  try { await historyApi.recordHistory(videoId) } catch {}
 }
 
 // Fetch note timestamps + poll for current video
@@ -385,6 +397,8 @@ const onKeyDown = (e: KeyboardEvent) => {
             @openLearn="(videoId: number) => handleOpenLearn(videoId)"
             :wordbankStatus="item.wordbank_status"
             @timeupdate="notePanelOpen && (feedPlayerTime = getActivePlayer()?.getCurrentTime?.() ?? 0)"
+            @viewReported="handleViewReported(item?.play_token)"
+            @historyReported="(videoId) => handleHistoryReported(videoId)"
           />
         </template>
       </FeedSwiper>

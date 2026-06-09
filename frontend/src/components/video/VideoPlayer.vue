@@ -13,7 +13,7 @@ const loadMutedPref = (): boolean => {
   }
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   src: string
   poster?: string
   muted?: boolean
@@ -24,7 +24,10 @@ const props = defineProps<{
   playToken?: string
   videoId?: number
   noteTimestamps?: number[]
-}>()
+  visible?: boolean
+}>(), {
+  visible: true,
+})
 
 const emit = defineEmits<{
   play: []
@@ -33,12 +36,15 @@ const emit = defineEmits<{
   dblclick: []
   viewReported: []
   completionReported: []
+  historyReported: [videoId: number]
   timeupdate: []
 }>()
 
 // Tracking flags - reset when src changes
 const viewReported = ref(false)
 const completionReported = ref(false)
+const historyReported = ref(false)
+const hasPlayed = ref(false)
 
 // Dynamic threshold: min(5s, duration * 0.2)
 const viewThreshold = computed(() => {
@@ -333,6 +339,8 @@ watch(
       isPlaying.value = false
       viewReported.value = false
       completionReported.value = false
+      historyReported.value = false
+      hasPlayed.value = false
       if (newAutoPlay) {
         setTimeout(() => play(), 100)
       }
@@ -373,9 +381,17 @@ onMounted(() => {
         viewReported.value = true
         emit('viewReported')
       }
+      // Watch history: report once when played >= 1s, has actually played, and visible
+      // visible defaults to true; Feed page passes playerVisible (false when <50% visible)
+      if (!historyReported.value && props.videoId && hasPlayed.value
+          && currentTime.value >= 1 && props.visible) {
+        historyReported.value = true
+        emit('historyReported', props.videoId)
+      }
     })
     video.addEventListener('playing', () => {
       isPlaying.value = true
+      hasPlayed.value = true
       showPoster.value = false
       showSkeleton.value = false
       emit('play')
