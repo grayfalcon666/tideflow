@@ -73,7 +73,7 @@ func main() {
 	cache.SetRepo(repo)
 	authSvc := service.NewAuthService(repo, cfg.JWT.Secret, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 	userSvc := service.NewUserService(repo, cfg.BigVThreshold, mqInstance)
-	videoSvc := service.NewVideoService(repo, cache, cfg.BigVThreshold, cfg.Upload.Dir, cfg.JWT.Secret)
+	videoSvc := service.NewVideoService(repo, cache, cfg.BigVThreshold, cfg.Upload.Dir, cfg.JWT.Secret, mqInstance)
 	feedSvc := service.NewFeedService(repo, cache, rdb, cfg.BigVThreshold)
 	interactionSvc := service.NewInteractionService(repo, mqInstance)
 	msgSvc := service.NewMessageService(repo)
@@ -83,6 +83,7 @@ func main() {
 	wordbankSvc := service.NewWordbankService(repo, cache)
 
 	// Scan vocab dir on startup: import new files, skip existing, delete removed
+	historySvc := service.NewHistoryService(repo, rdb)
 	learningSvc := service.NewLearningService(repo, wordbankSvc, cache)
 	if err := learningSvc.ImportVocabLists(context.Background(), cfg.VocabListsDir); err != nil {
 		log.Printf("warning: vocab import failed: %v", err)
@@ -120,12 +121,13 @@ func main() {
 	wordbankHandler := handler.NewWordbankHandler(wordbankSvc)
 	learningHandler := handler.NewLearningHandler(learningSvc)
 	adminVocabHandler := handler.NewAdminVocabHandler(learningSvc, cfg.VocabListsDir)
+	historyHandler := handler.NewHistoryHandler(historySvc)
 
 	hub := mq.NewSSEHub()
 	go hub.Run()
 	sseHandler := handler.NewSSEHandler(hub)
 
-	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, noteHandler, wordbankHandler, searchHandler, learningHandler, adminVocabHandler, cfg)
+	router := setupRouter(authMw, rateLimitMw, authHandler, userHandler, videoHandler, feedHandler, interactionHandler, msgHandler, notifHandler, sseHandler, tagHandler, noteHandler, wordbankHandler, searchHandler, learningHandler, adminVocabHandler, historyHandler, cfg)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
@@ -182,6 +184,7 @@ func setupRouter(
 	searchHandler *handler.SearchHandler,
 	learningHandler *handler.LearningHandler,
 	adminVocabHandler *handler.AdminVocabHandler,
+	historyHandler *handler.HistoryHandler,
 	cfg *config.Config,
 ) *gin.Engine {
 	r := gin.Default()
@@ -284,6 +287,11 @@ func setupRouter(
 	}
 
 	r.POST("/api/v1/metrics/view", videoHandler.RecordView)
+
+	r.POST("/api/v1/history/record", authMw.JWTAuth(), historyHandler.RecordHistory)
+	r.GET("/api/v1/history", authMw.JWTAuth(), historyHandler.GetHistory)
+	r.DELETE("/api/v1/history/:video_id", authMw.JWTAuth(), historyHandler.DeleteHistory)
+	r.DELETE("/api/v1/history", authMw.JWTAuth(), historyHandler.ClearHistory)
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler,
 		ginSwagger.PersistAuthorization(true),

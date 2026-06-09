@@ -250,3 +250,14 @@ type UserDailyLearning struct {
 func (UserDailyLearning) TableName() string {
 	return "user_daily_learnings"
 }
+
+type WatchHistory struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	AccountID uint      `gorm:"not null;uniqueIndex:idx_watch_history_account_video" json:"account_id"`
+	VideoID   uint      `gorm:"not null;uniqueIndex:idx_watch_history_account_video" json:"video_id"`
+	WatchedAt time.Time `gorm:"not null" json:"watched_at"`
+}
+
+func (WatchHistory) TableName() string {
+	return "watch_histories"
+}

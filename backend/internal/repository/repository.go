@@ -854,6 +854,41 @@ func (r *Repository) GetUserWordStatusesAll(ctx context.Context, accountID uint,
 	return results, nil
 }
 
+// =================================================================
+// WatchHistory — 观看历史
+// =================================================================
+
+// UpsertWatchHistory inserts a watch history record or updates watched_at if it already exists.
+func (r *Repository) UpsertWatchHistory(ctx context.Context, accountID, videoID uint) error {
+	return r.db.WithContext(ctx).Exec(
+		`INSERT INTO watch_histories (account_id, video_id, watched_at)
+		 VALUES (?, ?, NOW())
+		 ON DUPLICATE KEY UPDATE watched_at = NOW()`,
+		accountID, videoID,
+	).Error
+}
+
+// GetWatchHistory returns watch history records for a user, ordered by watched_at DESC.
+func (r *Repository) GetWatchHistory(ctx context.Context, accountID uint, before time.Time, limit int) ([]*models.WatchHistory, error) {
+	var records []*models.WatchHistory
+	query := r.db.WithContext(ctx).Where("account_id = ?", accountID)
+	if !before.IsZero() {
+		query = query.Where("watched_at < ?", before)
+	}
+	err := query.Order("watched_at DESC").Limit(limit).Find(&records).Error
+	return records, err
+}
+
+// DeleteWatchHistory deletes a single watch history record.
+func (r *Repository) DeleteWatchHistory(ctx context.Context, accountID, videoID uint) error {
+	return r.db.WithContext(ctx).Where("account_id = ? AND video_id = ?", accountID, videoID).Delete(&models.WatchHistory{}).Error
+}
+
+// ClearWatchHistory deletes all watch history records for a user.
+func (r *Repository) ClearWatchHistory(ctx context.Context, accountID uint) error {
+	return r.db.WithContext(ctx).Where("account_id = ?", accountID).Delete(&models.WatchHistory{}).Error
+}
+
 // GetUserDailyLearnings returns all daily learning records for a user in a given year.
 func (r *Repository) GetUserDailyLearnings(ctx context.Context, accountID uint, year int) ([]*models.UserDailyLearning, error) {
 	var records []*models.UserDailyLearning

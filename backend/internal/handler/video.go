@@ -196,6 +196,9 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 		playToken, _ = h.video.GeneratePlayToken(c.Request.Context(), video.ID, userID, ip)
 	}
 
+	// Read view count from Redis (fallback DB)
+	viewCount, _ := h.video.GetViewCount(c.Request.Context(), video.ID)
+
 	response.Success(c, gin.H{
 		"id":                  video.ID,
 		"author":              authorData,
@@ -209,7 +212,7 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 		"create_time":         video.CreateTime,
 		"likes_count":         video.LikesCount,
 		"comment_count":       video.CommentCount,
-		"view_count":          video.ViewCount,
+		"view_count":          viewCount,
 		"popularity":          video.Popularity,
 		"tags":                tags,
 		"is_liked":            isLiked,

@@ -73,6 +73,11 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/history',
+    component: () => import('../views/HistoryPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/tag/:tagName',
     component: () => import('../views/TagSearchPage.vue'),
     meta: {},
