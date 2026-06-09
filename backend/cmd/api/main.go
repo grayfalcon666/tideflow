@@ -73,7 +73,7 @@ func main() {
 	cache.SetRepo(repo)
 	authSvc := service.NewAuthService(repo, cfg.JWT.Secret, cfg.JWT.AccessExpiry, cfg.JWT.RefreshExpiry)
 	userSvc := service.NewUserService(repo, cfg.BigVThreshold, mqInstance)
-	videoSvc := service.NewVideoService(repo, cache, cfg.BigVThreshold, cfg.Upload.Dir, cfg.JWT.Secret, mqInstance)
+	videoSvc := service.NewVideoService(repo, cache, cfg.BigVThreshold, cfg.Upload.Dir, mqInstance)
 	feedSvc := service.NewFeedService(repo, cache, rdb, cfg.BigVThreshold)
 	interactionSvc := service.NewInteractionService(repo, mqInstance)
 	msgSvc := service.NewMessageService(repo)
@@ -284,6 +284,7 @@ func setupRouter(
 
 	if searchHandler != nil {
 		r.GET("/api/v1/search/videos", authMw.JWTAuth(), searchHandler.SearchVideos)
+		r.GET("/api/v1/search/users", authMw.JWTAuth(), searchHandler.SearchUsers)
 	}
 
 	r.POST("/api/v1/metrics/view", videoHandler.RecordView)

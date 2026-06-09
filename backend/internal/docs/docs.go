@@ -1106,7 +1106,12 @@ const docTemplate = `{
         },
         "/api/v1/metrics/view": {
             "post": {
-                "description": "验证 play_token，解析 user_id/ip，半小时限流后累加播放量",
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "上报视频播放记录，半小时限流后累加播放量",
                 "consumes": [
                     "application/json"
                 ],
@@ -1119,12 +1124,12 @@ const docTemplate = `{
                 "summary": "上报播放记录",
                 "parameters": [
                     {
-                        "description": "播放记录",
+                        "description": "{video_id}",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handler.RecordViewRequest"
+                            "type": "object"
                         }
                     }
                 ],
@@ -1304,6 +1309,60 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/search/users": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "通过用户名关键词搜索用户，按粉丝数排序",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "搜索"
+                ],
+                "summary": "搜索用户",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "搜索关键词",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.SearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
@@ -3239,17 +3298,6 @@ const docTemplate = `{
                     }
                 },
                 "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_handler.RecordViewRequest": {
-            "type": "object",
-            "required": [
-                "play_token"
-            ],
-            "properties": {
-                "play_token": {
                     "type": "string"
                 }
             }

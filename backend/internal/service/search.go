@@ -50,6 +50,12 @@ func (s *SearchService) EnrichVideoIDs(ctx context.Context, ids []uint) ([]*mode
 	return videos, nil
 }
 
+// SearchUsers searches users by username (LIKE match), ordered by follower count.
+func (s *SearchService) SearchUsers(ctx context.Context, query string, page, size int) ([]*models.Account, int64, error) {
+	offset := (page - 1) * size
+	return s.repo.SearchUsers(ctx, query, offset, size)
+}
+
 // EnrichWithAccountData fills in avatar_url and is_big_v for a list of videos.
 func (s *SearchService) EnrichWithAccountData(ctx context.Context, videos []*models.Video) {
 	if len(videos) == 0 {

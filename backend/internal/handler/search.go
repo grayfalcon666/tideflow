@@ -97,3 +97,77 @@ func (h *SearchHandler) SearchVideos(c *gin.Context) {
 		NextCursor: nextCursor,
 	})
 }
+
+// @Summary 搜索用户
+// @Description 通过用户名关键词搜索用户，按粉丝数排序
+// @Tags 搜索
+// @Produce json
+// @Param q query string true "搜索关键词"
+// @Param page query int false "页码" default(1)
+// @Param size query int false "每页数量" default(20)
+// @Success 200 {object} response.SearchResponse
+// @Failure 400 {object} response.Response
+// @Security OAuth2Password
+// @Router /api/v1/search/users [get]
+func (h *SearchHandler) SearchUsers(c *gin.Context) {
+	query := c.Query("q")
+	if query == "" {
+		response.BadRequest(c, "q (query) is required")
+		return
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	page := 1
+	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		page = p
+	}
+
+	sizeStr := c.DefaultQuery("size", "20")
+	size := 20
+	if s, err := strconv.Atoi(sizeStr); err == nil && s > 0 && s <= 50 {
+		size = s
+	}
+
+	users, total, err := h.search.SearchUsers(c.Request.Context(), query, page, size)
+	if err != nil {
+		response.InternalServerError(c, "search failed: "+err.Error())
+		return
+	}
+
+	// Build response without sensitive fields
+	type userResult struct {
+		ID            uint   `json:"id"`
+		Username      string `json:"username"`
+		AvatarURL     string `json:"avatar_url"`
+		Bio           string `json:"bio"`
+		FollowerCount int    `json:"follower_count"`
+	}
+	items := make([]userResult, len(users))
+	for i, u := range users {
+		items[i] = userResult{
+			ID:            u.ID,
+			Username:      u.Username,
+			AvatarURL:     u.AvatarURL,
+			Bio:           u.Bio,
+			FollowerCount: u.FollowerCount,
+		}
+	}
+
+	from := (page - 1) * size
+	hasMore := int64(from+len(items)) < total
+
+	var nextCursor *string
+	if hasMore && len(items) > 0 {
+		nc := strconv.Itoa(page + 1)
+		nextCursor = &nc
+	}
+
+	response.Success(c, response.SearchResponse{
+		Items:      items,
+		Total:      total,
+		Page:       page,
+		Size:       size,
+		HasMore:    hasMore,
+		NextCursor: nextCursor,
+	})
+}

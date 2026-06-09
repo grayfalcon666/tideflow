@@ -45,6 +45,17 @@ func (r *Repository) GetAccountByID(ctx context.Context, id uint) (*models.Accou
 	return &acc, nil
 }
 
+func (r *Repository) SearchUsers(ctx context.Context, query string, offset, limit int) ([]*models.Account, int64, error) {
+	var accounts []*models.Account
+	var total int64
+	q := r.db.WithContext(ctx).Model(&models.Account{}).Where("username LIKE ?", "%"+query+"%")
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := q.Order("follower_count DESC").Offset(offset).Limit(limit).Find(&accounts).Error
+	return accounts, total, err
+}
+
 func (r *Repository) GetAccountsByIDs(ctx context.Context, ids []uint) ([]*models.Account, error) {
 	var accounts []*models.Account
 	err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&accounts).Error
