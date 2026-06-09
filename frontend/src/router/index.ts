@@ -78,6 +78,11 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/search',
+    component: () => import('../views/SearchPage.vue'),
+    meta: {},
+  },
+  {
     path: '/tag/:tagName',
     component: () => import('../views/TagSearchPage.vue'),
     meta: {},
@@ -99,6 +104,19 @@ router.beforeEach((to) => {
   const authStore = useAuthStore()
   if (to.meta.requiresAuth && !authStore.isLoggedIn) {
     return `/account?redirect=${to.fullPath}`
+  }
+})
+
+// Chunk load failure retry: Vite dev server偶尔丢包导致懒加载失败，自动重试一次
+router.onError((err, to) => {
+  if (err.message?.includes('dynamically imported module')) {
+    const key = '__chunk_retry_' + to.path
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1')
+      window.location.reload()
+    } else {
+      sessionStorage.removeItem(key)
+    }
   }
 })
 
