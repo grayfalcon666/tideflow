@@ -490,6 +490,278 @@
                 }
             }
         },
+        "/api/v1/history": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "分页获取当前用户的观看历史",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "获取观看历史",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.PageResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "清空当前用户的所有观看历史",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "清空观看历史",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/history/record": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "记录观看历史（30分钟去重）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "记录观看历史",
+                "parameters": [
+                    {
+                        "description": "{video_id}",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/history/{video_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "删除指定视频的观看历史",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "视频"
+                ],
+                "summary": "删除单条观看记录",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "视频ID",
+                        "name": "video_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/learn/batch/abort": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "删除当前活跃的学习队列和批次信息，已提交的单词状态不受影响",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "学习"
+                ],
+                "summary": "放弃当前学习批次",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/learn/commit": {
+            "post": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "提交一个单词的拼写结果（correct/wrong），更新星级和队列",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "学习"
+                ],
+                "summary": "提交单个单词拼写结果",
+                "parameters": [
+                    {
+                        "description": "单词提交数据",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_internal_service.CommitReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_internal_service.CommitResp"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/learn/habit/stats": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "返回指定年份的热力图数据、打卡天数和连续打卡天数",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "学习"
+                ],
+                "summary": "获取学习习惯统计",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "年份",
+                        "name": "year",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_internal_service.HabitStatsResp"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/learn/lists": {
             "get": {
                 "security": [
@@ -505,6 +777,31 @@
                     "学习"
                 ],
                 "summary": "获取考纲词表列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/learn/today/words": {
+            "get": {
+                "security": [
+                    {
+                        "OAuth2Password": []
+                    }
+                ],
+                "description": "返回用户今天学习的所有单词及其星级",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "学习"
+                ],
+                "summary": "获取今日学习的单词",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -2366,14 +2663,14 @@
                         "OAuth2Password": []
                     }
                 ],
-                "description": "计算视频词库与指定考纲词表的交集，返回可用于学习的单词列表",
+                "description": "计算视频词库与考纲词表交集，返回当前批次的待学单词",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "学习"
                 ],
-                "summary": "获取视频中属于指定词表的单词",
+                "summary": "获取视频学习单词列表",
                 "parameters": [
                     {
                         "type": "integer",
@@ -2388,17 +2685,37 @@
                         "name": "list_id",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 15,
+                        "description": "每批单词数",
+                        "name": "chunk_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模式: spell 或 type",
+                        "name": "mode",
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/tideflow_internal_service.LearningWordsResponse"
+                            "$ref": "#/definitions/tideflow_internal_service.LearnWordsResp"
                         }
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/tideflow_pkg_response.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/tideflow_pkg_response.Response"
                         }
@@ -3032,6 +3349,87 @@
                 }
             }
         },
+        "tideflow_internal_service.CommitReq": {
+            "type": "object",
+            "properties": {
+                "result": {
+                    "description": "\"correct\" or \"wrong\"",
+                    "type": "string"
+                },
+                "word": {
+                    "type": "string"
+                }
+            }
+        },
+        "tideflow_internal_service.CommitResp": {
+            "type": "object",
+            "properties": {
+                "batch_remaining": {
+                    "type": "integer"
+                },
+                "daily_words_today": {
+                    "type": "integer"
+                },
+                "new_status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tideflow_internal_service.DailyHeatmapEntry": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "words_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tideflow_internal_service.HabitStatsResp": {
+            "type": "object",
+            "properties": {
+                "current_streak": {
+                    "type": "integer"
+                },
+                "heatmap": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tideflow_internal_service.DailyHeatmapEntry"
+                    }
+                },
+                "today_videos": {
+                    "type": "integer"
+                },
+                "today_words": {
+                    "type": "integer"
+                },
+                "total_days": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tideflow_internal_service.LearnWordsResp": {
+            "type": "object",
+            "properties": {
+                "batch_remaining": {
+                    "type": "integer"
+                },
+                "batch_total": {
+                    "type": "integer"
+                },
+                "daily_remaining": {
+                    "description": "nil for type mode",
+                    "type": "integer"
+                },
+                "words": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tideflow_internal_service.LearningWord"
+                    }
+                }
+            }
+        },
         "tideflow_internal_service.LearningWord": {
             "type": "object",
             "properties": {
@@ -3055,23 +3453,6 @@
                 },
                 "value": {
                     "type": "string"
-                }
-            }
-        },
-        "tideflow_internal_service.LearningWordsResponse": {
-            "type": "object",
-            "properties": {
-                "list_name": {
-                    "type": "string"
-                },
-                "total": {
-                    "type": "integer"
-                },
-                "words": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/tideflow_internal_service.LearningWord"
-                    }
                 }
             }
         },

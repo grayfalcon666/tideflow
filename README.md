@@ -1,6 +1,6 @@
 # TideFlow – 仿 TikTok 短视频 Feed 流系统
 
-> **TideFlow** 是一个高性能、高可扩展的短视频 Feed 流后端系统，采用 **推拉结合** 与 **冷热分离** 架构，完美支撑类 TikTok 的全局最新、热门榜单、关注流三大时间线场景。
+> **TideFlow** 是一个全栈短视频平台，后端采用 **推拉结合** 与 **冷热分离** 架构，前端基于 Vue 3 + Quasar 构建沉浸式竖屏 Feed 流体验，并内置 **语境学习** 系统，支持在刷视频的同时进行英语单词拼写训练。
 
 ## 项目定位
 
@@ -9,6 +9,7 @@ TideFlow 为短视频平台提供**极致流畅的时间线体验**：
 - 全局最新：热 ZSET + 冷回源，瞬时百万视频快速截断
 - 热门榜单：分钟级滑动窗口 + 快照缓存，实时热度不衰减
 - 视频搜索：Elasticsearch + IK 分词，支持标题/用户名/描述/标签全文检索
+- 语境学习：基于视频字幕的英语单词学习，拼写训练 + 语境回溯 + 学习习惯追踪
 
 ## 核心特性
 
@@ -21,26 +22,27 @@ TideFlow 为短视频平台提供**极致流畅的时间线体验**：
 | **分布式限流与锁** | Redis Lua 原子限流（登录、互动等），分布式锁保障详情回填等关键操作 |
 | **事件驱动架构** | RabbitMQ 解耦视频发布、点赞、评论、关注等事件，各 Worker 独立伸缩 |
 | **实时通知** | SSE 推送 + 站内通知表，毫秒级触达 |
+| **语境学习** | 视频字幕提取单词 → 拼写/跟打训练 → 语境回溯定位原句 → 学习习惯日历追踪 |
 
 ## 技术架构
 
 ```mermaid
 graph TD
-    Client[移动端/Web] --> LB[负载均衡]
-    LB --> API[API Server Gin]
-    API --> Redis[(Redis 集群)]
-    API --> MySQL[(MySQL 主从)]
+    Frontend[Vue 3 + Quasar] --> API[API Server Gin]
+    API --> Redis[(Redis)]
+    API --> MySQL[(MySQL)]
     API --> RabbitMQ[(RabbitMQ)]
-    API --> ES[(Elasticsearch + Kibana)]
+    API --> ES[(Elasticsearch)]
     RabbitMQ --> Worker[TimelineWorker / SearchWorker / LikeWorker ...]
     Worker --> Redis
     Worker --> MySQL
     Worker --> ES
-    API --> 数据库存储[对象存储 视频/封面]
+    API --> OSS[对象存储 视频/封面]
 ```
 
 ### 技术栈
 
+#### 后端
 - **语言**：Go 1.24.5
 - **Web 框架**：Gin v1.11.0
 - **数据库**：MySQL 8.0（GORM v1.31.1）
@@ -51,6 +53,13 @@ graph TD
 - **本地缓存**：go-cache v2.1
 - **并发控制**：golang.org/x/sync
 - **鉴权**：JWT v5
+
+#### 前端
+- **框架**：Vue 3 + TypeScript
+- **UI 组件库**：Quasar v2
+- **构建工具**：Vite v7
+- **状态管理**：Pinia
+- **包管理**：pnpm
 
 ## 核心模块
 
@@ -88,6 +97,76 @@ graph TD
 ### 6. 通知与私信
 - 站内通知（点赞、评论、关注）持久化 + SSE 实时推送
 - 私信会话（未读数、已读状态）
+
+### 7. 语境学习系统
+
+基于视频字幕的英语单词学习模块，在刷视频的同时进行沉浸式词汇训练。
+
+#### 学习流程
+
+```
+选择词书 → 预览单词 → 拼写/跟打训练 → 学习结果 → 查看语境（视频字幕原句）
+```
+
+| 步骤 | 组件 | 说明 |
+|------|------|------|
+| 选择词书 | `LearnStepSelectList` | 从词书列表中选择学习目标，支持自定义每组数量 |
+| 预览单词 | `LearnStepWordList` | 浏览本轮待学单词列表，查看释义和音标 |
+| 拼写训练 | `LearnStepSpelling` | 看释义拼单词，错误自动排到队首重练，支持打字音效 |
+| 跟打临摹 | `LearnStepTyping` | 看原词逐字临摹，实时显示对错状态，支持打字音效 |
+| 学习结果 | `LearnStepResult` | 展示正确率、学习数据，提交到服务端记录 |
+| 语境回溯 | `LearnCaptionDrawer` | 定位单词在视频字幕中的原句，点击跳转视频对应时间点播放 |
+
+#### 核心功能
+
+- **双模式训练**：拼写模式（盲拼）和跟打模式（临摹），适配不同学习阶段
+- **语境回溯**：从视频字幕中提取单词所在句子，点击字幕可跳转视频到对应时间点
+- **小窗播放**：语境查看界面内置迷你视频播放器，点击字幕即时播放对应片段
+- **打字音效**：基于 Web Audio API 程序化生成按键/退格/正确/错误音效，可在面板内一键开关
+- **学习习惯**：日历热力图追踪每日学习情况，支持年度统计
+- **内联面板**：学习面板内嵌于 Feed 流右侧，不中断刷视频体验；移动端自动全屏覆盖
+- **视频暂停**：进入学习面板自动暂停视频，退出后可继续播放
+- **滑动锁定**：学习期间禁用滑动/滚轮切换视频，防止误操作
+
+#### API 接口
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/v1/learn/lists` | GET | 获取词书列表 |
+| `/api/v1/videos/:id/learn/words` | GET | 获取视频关联的学习单词 |
+| `/api/v1/videos/:id/learn/word/:word/captions` | GET | 获取单词在视频字幕中的语境 |
+| `/api/v1/learn/commit` | POST | 提交学习结果（正确/错误） |
+| `/api/v1/learn/batch/abort` | POST | 中止当前学习批次 |
+| `/api/v1/learn/habit/stats` | GET | 获取学习习惯统计数据 |
+| `/api/v1/learn/today/words` | GET | 获取今日学习单词 |
+
+## 前端架构
+
+### 页面路由
+
+| 路由 | 页面 | 说明 |
+|------|------|------|
+| `/` | FeedPage | 竖屏沉浸式 Feed 流（Swiper 全屏滑动） |
+| `/hot` | HotPage | 热门榜单 |
+| `/video/:id` | VideoDetailPage | 视频详情（含评论、笔记、学习面板） |
+| `/publish` | PublishPage | 视频发布 |
+| `/edit/:id` | VideoEditPage | 视频编辑 |
+| `/user/:id` | UserProfilePage | 用户主页 |
+| `/notifications` | NotificationPage | 通知中心 |
+| `/messages` | ConversationListPage | 私信列表 |
+| `/messages/:id` | DirectMessagePage | 对话详情 |
+| `/search` | TagSearchPage | 标签搜索 |
+| `/login` | LoginPage | 登录 |
+| `/register` | RegisterPage | 注册 |
+
+### Feed 流交互
+
+- **全屏竖屏滑动**：基于 Swiper 实现类 TikTok 的全屏滑动体验
+- **右侧滑出面板**：评论、笔记、学习三个面板互斥内联于 FeedSlideContent 右侧
+  - 桌面端：宽度 400px，推动视频内容左移
+  - 移动端（≤1023px）：全屏覆盖，不遮挡底层交互
+- **全局快捷键**：`K` 暂停/播放、`M` 静音、`↑/↓` 切换视频（输入框内自动跳过）
+- **手势控制**：学习面板打开时自动锁定滑动和滚轮，防止误切换
 
 ## 数据流简图
 
@@ -128,6 +207,8 @@ GET /feed/following?cursor&limit
 
 ## 快速开始
 
+### 后端
+
 ```bash
 # 克隆仓库
 git clone https://github.com/your-org/tideflow.git
@@ -150,6 +231,21 @@ go run cmd/api/main.go
 
 # 启动后台 Worker（消费 MQ 事件）
 go run cmd/worker/main.go
+```
+
+### 前端
+
+```bash
+cd frontend
+
+# 安装依赖
+pnpm install
+
+# 开发模式（http://localhost:5173）
+pnpm dev
+
+# 生产构建
+pnpm build
 ```
 
 ### 基础设施端口

@@ -156,6 +156,59 @@ definitions:
       start:
         type: string
     type: object
+  tideflow_internal_service.CommitReq:
+    properties:
+      result:
+        description: '"correct" or "wrong"'
+        type: string
+      word:
+        type: string
+    type: object
+  tideflow_internal_service.CommitResp:
+    properties:
+      batch_remaining:
+        type: integer
+      daily_words_today:
+        type: integer
+      new_status:
+        type: integer
+    type: object
+  tideflow_internal_service.DailyHeatmapEntry:
+    properties:
+      date:
+        type: string
+      words_count:
+        type: integer
+    type: object
+  tideflow_internal_service.HabitStatsResp:
+    properties:
+      current_streak:
+        type: integer
+      heatmap:
+        items:
+          $ref: '#/definitions/tideflow_internal_service.DailyHeatmapEntry'
+        type: array
+      today_videos:
+        type: integer
+      today_words:
+        type: integer
+      total_days:
+        type: integer
+    type: object
+  tideflow_internal_service.LearnWordsResp:
+    properties:
+      batch_remaining:
+        type: integer
+      batch_total:
+        type: integer
+      daily_remaining:
+        description: nil for type mode
+        type: integer
+      words:
+        items:
+          $ref: '#/definitions/tideflow_internal_service.LearningWord'
+        type: array
+    type: object
   tideflow_internal_service.LearningWord:
     properties:
       definition:
@@ -172,17 +225,6 @@ definitions:
         type: string
       value:
         type: string
-    type: object
-  tideflow_internal_service.LearningWordsResponse:
-    properties:
-      list_name:
-        type: string
-      total:
-        type: integer
-      words:
-        items:
-          $ref: '#/definitions/tideflow_internal_service.LearningWord'
-        type: array
     type: object
   tideflow_internal_service.WordCaptionsResponse:
     properties:
@@ -564,6 +606,175 @@ paths:
       summary: 按标签搜索视频
       tags:
       - 时间线
+  /api/v1/history:
+    delete:
+      description: 清空当前用户的所有观看历史
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 清空观看历史
+      tags:
+      - 视频
+    get:
+      description: 分页获取当前用户的观看历史
+      parameters:
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - default: 20
+        description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.PageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 获取观看历史
+      tags:
+      - 视频
+  /api/v1/history/{video_id}:
+    delete:
+      description: 删除指定视频的观看历史
+      parameters:
+      - description: 视频ID
+        in: path
+        name: video_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 删除单条观看记录
+      tags:
+      - 视频
+  /api/v1/history/record:
+    post:
+      consumes:
+      - application/json
+      description: 记录观看历史（30分钟去重）
+      parameters:
+      - description: '{video_id}'
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 记录观看历史
+      tags:
+      - 视频
+  /api/v1/learn/batch/abort:
+    post:
+      description: 删除当前活跃的学习队列和批次信息，已提交的单词状态不受影响
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 放弃当前学习批次
+      tags:
+      - 学习
+  /api/v1/learn/commit:
+    post:
+      description: 提交一个单词的拼写结果（correct/wrong），更新星级和队列
+      parameters:
+      - description: 单词提交数据
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/tideflow_internal_service.CommitReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_internal_service.CommitResp'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 提交单个单词拼写结果
+      tags:
+      - 学习
+  /api/v1/learn/habit/stats:
+    get:
+      description: 返回指定年份的热力图数据、打卡天数和连续打卡天数
+      parameters:
+      - description: 年份
+        in: query
+        name: year
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_internal_service.HabitStatsResp'
+      security:
+      - OAuth2Password: []
+      summary: 获取学习习惯统计
+      tags:
+      - 学习
   /api/v1/learn/lists:
     get:
       description: 返回所有预置的考纲词表（如四级、六级等）
@@ -577,6 +788,21 @@ paths:
       security:
       - OAuth2Password: []
       summary: 获取考纲词表列表
+      tags:
+      - 学习
+  /api/v1/learn/today/words:
+    get:
+      description: 返回用户今天学习的所有单词及其星级
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+      security:
+      - OAuth2Password: []
+      summary: 获取今日学习的单词
       tags:
       - 学习
   /api/v1/likes/mine:
@@ -1577,7 +1803,7 @@ paths:
       - 学习
   /api/v1/videos/{id}/learn/words:
     get:
-      description: 计算视频词库与指定考纲词表的交集，返回可用于学习的单词列表
+      description: 计算视频词库与考纲词表交集，返回当前批次的待学单词
       parameters:
       - description: 视频ID
         in: path
@@ -1589,15 +1815,29 @@ paths:
         name: list_id
         required: true
         type: integer
+      - default: 15
+        description: 每批单词数
+        in: query
+        name: chunk_size
+        type: integer
+      - description: '模式: spell 或 type'
+        in: query
+        name: mode
+        required: true
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/tideflow_internal_service.LearningWordsResponse'
+            $ref: '#/definitions/tideflow_internal_service.LearnWordsResp'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/tideflow_pkg_response.Response'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/tideflow_pkg_response.Response'
         "412":
@@ -1606,7 +1846,7 @@ paths:
             $ref: '#/definitions/tideflow_pkg_response.Response'
       security:
       - OAuth2Password: []
-      summary: 获取视频中属于指定词表的单词
+      summary: 获取视频学习单词列表
       tags:
       - 学习
   /api/v1/videos/{id}/like:
