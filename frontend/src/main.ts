@@ -8,6 +8,7 @@ import { useAuthStore } from './stores/auth'
 
 // 引入 Quasar 样式
 import 'quasar/src/css/index.sass'
+import '@quasar/extras/material-icons/material-icons.css'
 import './styles/global.css'
 
 const app = createApp(App)

@@ -107,6 +107,9 @@ onMounted(() => fetchProfile())
         <button v-if="isMe" class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
           设置
         </button>
+        <button v-if="isMe" class="tab-btn history-link" @click="router.push('/history')">
+          历史
+        </button>
       </div>
 
       <UserVideoTab v-if="activeTab === 'videos' && userId !== null" :userId="userId" />

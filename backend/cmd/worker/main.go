@@ -106,10 +106,13 @@ func main() {
 		}
 	}
 
-	// 播放量定时落库：每 5 分钟将 Redis 中的计数合并到 MySQL
+	// 启动时从 DB 全量加载播放量到 Redis（灾难恢复）
+	vw := mq.NewViewCountWorker(rdb, repo)
+	vw.LoadViewCountsToRedis(context.Background())
+
+	// 播放量定时落库：每 2 分钟将 Redis 中的计数合并到 MySQL
 	c := cron.New()
-	c.AddFunc("@every 5m", func() {
-		vw := mq.NewViewCountWorker(rdb, repo)
+	c.AddFunc("@every 2m", func() {
 		vw.FlushViewCounts(context.Background())
 	})
 	c.Start()

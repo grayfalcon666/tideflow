@@ -1,15 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
 import SideBar from './components/layout/SideBar.vue'
 import BottomNav from './components/layout/BottomNav.vue'
-import { useAuthStore } from './stores/auth'
 import { useLayoutStore } from './stores/layout'
 
-const $q = useQuasar()
 const router = useRouter()
-const authStore = useAuthStore()
 const layoutStore = useLayoutStore()
 
 const isMobile = ref(window.innerWidth < 1024)
@@ -35,8 +31,6 @@ const hideLayout = computed(() =>
 )
 
 onMounted(() => {
-  authStore.initFromStorage()
-
   const onResize = () => {
     isMobile.value = window.innerWidth < 1024
   }

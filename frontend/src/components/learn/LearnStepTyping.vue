@@ -137,6 +137,8 @@ const focusInput = () => nextTick(() => hiddenInput.value?.focus())
 
 onMounted(() => {
   initWord()
+  // Delayed fallback focus in case panel animation blocks initial focus
+  setTimeout(() => hiddenInput.value?.focus(), 100)
 })
 </script>
 
@@ -445,11 +447,12 @@ onMounted(() => {
 }
 
 .hidden-input {
-  position: absolute;
+  position: fixed;
   opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  left: -9999px;
+  top: 0;
 }
 
 .feedback-overlay {

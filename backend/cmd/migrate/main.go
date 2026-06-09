@@ -58,6 +58,7 @@ func migrate(db *gorm.DB) error {
 		&models.VocabWord{},
 		&models.UserWord{},
 		&models.UserDailyLearning{},
+		&models.WatchHistory{},
 	); err != nil {
 		return err
 	}

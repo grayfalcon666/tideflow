@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import type { LearnWord, CommitLearningResp } from '../../types'
 import * as learnService from '../../services/learn'
 import { useTypingSounds } from '../../composables/useTypingSounds'
@@ -154,10 +154,15 @@ const handleKeydown = (e: KeyboardEvent) => {
     playKey()
   }
 }
+
+onMounted(() => {
+  // Delay focus to ensure panel animation has settled
+  setTimeout(() => hiddenInput.value?.focus(), 100)
+})
 </script>
 
 <template>
-  <div class="spelling">
+  <div class="spelling" @click="focusInput">
     <!-- Progress bar -->
     <div class="progress-bar-wrap">
       <div class="progress-bar">
@@ -187,7 +192,7 @@ const handleKeydown = (e: KeyboardEvent) => {
     </div>
 
     <!-- Word card -->
-    <div class="spelling-card" @click="focusInput">
+    <div class="spelling-card">
       <!-- Phonetic -->
       <div class="phonetic-row">
         <span class="phoneme" @click="showUkPhone = !showUkPhone">
@@ -534,11 +539,12 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 .hidden-input {
-  position: absolute;
+  position: fixed;
   opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  left: -9999px;
+  top: 0;
 }
 
 .submit-row {

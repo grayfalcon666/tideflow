@@ -15,7 +15,7 @@ const myId = computed(() => authStore.accountId)
 const menuItems = computed(() => [
   { label: '我的作品', route: myId.value ? `/u/${myId.value}` : '/' },
   { label: '我的喜欢', route: myId.value ? `/u/${myId.value}?tab=liked` : '/' },
-  { label: '观看历史', route: '/' },
+  { label: '观看历史', route: '/history' },
   { label: '退出登录', action: 'logout' },
 ])
 

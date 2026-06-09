@@ -67,7 +67,7 @@ const fetchComments = async (reset = false) => {
     }
     cursor.value = d.next_cursor
     hasMore.value = d.has_more ?? false
-  } finally {
+  } catch {} finally {
     loading.value = false
   }
 }

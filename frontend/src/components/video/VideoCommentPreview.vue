@@ -23,7 +23,7 @@ const fetchPreview = async () => {
     const resp = await commentService.getComments(props.videoId, 0, undefined, 3)
     const d = resp.data.data
     comments.value = (d?.items ?? []).map(normalizeComment)
-  } finally {
+  } catch {} finally {
     loading.value = false
   }
 }

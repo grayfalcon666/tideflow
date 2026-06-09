@@ -172,6 +172,13 @@ const publish = async () => {
 
 <template>
   <div class="publish-page">
+    <div class="publish-header">
+      <button class="back-btn" @click="router.back()">
+        <TFIcon name="arrow_back" :size="22" />
+      </button>
+      <h2 class="header-title">发布视频</h2>
+    </div>
+
     <!-- Step indicator -->
     <div class="steps-bar">
       <div v-for="n in 4" :key="n" class="step-dot" :class="{ active: step >= n, current: step === n }">
@@ -345,6 +352,39 @@ const publish = async () => {
   margin: 0 auto;
   padding: var(--space-6);
   padding-bottom: 100px;
+
+  @media (max-width: 520px) {
+    padding: var(--space-3);
+  }
+}
+
+.publish-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-base);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    opacity: 0.7;
+  }
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-base);
+  margin: 0;
 }
 
 .steps-bar {
