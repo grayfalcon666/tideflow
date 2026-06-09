@@ -101,7 +101,5 @@ export const completeChunkedUpload = (uploadId: string) =>
     is_vertical: boolean
   }>>('/videos/upload/complete', { upload_id: uploadId })
 
-export const recordView = (playToken: string) =>
-  api.post<ApiResponse<{ user_id: number; client_ip: string; video_id: number }>>('/metrics/view', {
-    play_token: playToken,
-  })
+export const recordView = (videoId: number) =>
+  api.post<ApiResponse<void>>('/metrics/view', { video_id: videoId })

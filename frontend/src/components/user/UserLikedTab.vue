@@ -32,7 +32,6 @@ type RawVideoItem = {
   width?: number
   height?: number
   duration?: number
-  play_token?: string
 }
 
 const normalizeVideo = (v: RawVideoItem): VideoItem => ({
@@ -60,7 +59,6 @@ const normalizeVideo = (v: RawVideoItem): VideoItem => ({
   width: v.width,
   height: v.height,
   duration: v.duration,
-  play_token: v.play_token,
 })
 
 const router = useRouter()

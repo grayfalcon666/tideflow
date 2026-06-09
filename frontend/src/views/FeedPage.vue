@@ -41,14 +41,7 @@ const learnVideoId = ref(0)
 const feedPlayerTime = ref(0)
 const noteTimestampsMap = ref<Record<number, number[]>>({})
 let timePollTimer: ReturnType<typeof setInterval> | null = null
-const playToken = ref<string | null>(null)
 let pendingRestoreIndex = 0
-
-// Play token from current video item for tracking
-const currentPlayToken = computed(() => {
-  const item = items.value[activeIndex.value]
-  return item?.play_token ?? playToken.value
-})
 
 const items = computed(() =>
   activeTab.value === 'latest' ? feedStore.latestItems : feedStore.followingItems
@@ -173,9 +166,9 @@ const handleFeedNoteSeek = (timestamp: number) => {
   player?.seekTo?.(timestamp)
 }
 
-const handleViewReported = async (token?: string) => {
-  if (!token) return
-  try { await videoService.recordView(token) } catch {}
+const handleViewReported = async (videoId: number) => {
+  if (!videoId) return
+  try { await videoService.recordView(videoId) } catch {}
 }
 
 const handleHistoryReported = async (videoId: number) => {
@@ -397,7 +390,7 @@ const onKeyDown = (e: KeyboardEvent) => {
             @openLearn="(videoId: number) => handleOpenLearn(videoId)"
             :wordbankStatus="item.wordbank_status"
             @timeupdate="notePanelOpen && (feedPlayerTime = getActivePlayer()?.getCurrentTime?.() ?? 0)"
-            @viewReported="handleViewReported(item?.play_token)"
+            @viewReported="handleViewReported(item?.video_id)"
             @historyReported="(videoId) => handleHistoryReported(videoId)"
           />
         </template>

@@ -23,7 +23,6 @@ type RawVideoItem = {
   width?: number
   height?: number
   duration?: number
-  play_token?: string
   wordbank_status?: string
 }
 
@@ -53,7 +52,6 @@ const normalizeVideo = (v: RawVideoItem): VideoItem => ({
   width: v.width,
   height: v.height,
   duration: v.duration,
-  play_token: v.play_token,
   wordbank_status: v.wordbank_status as WordbankStatus | undefined,
 })
 

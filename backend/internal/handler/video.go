@@ -186,15 +186,8 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 		}
 	}
 
-	userID := middleware.GetUserID(c)
 	isLiked := false
 	isFollowing := false
-
-	var playToken string
-	if video != nil {
-		ip := c.ClientIP()
-		playToken, _ = h.video.GeneratePlayToken(c.Request.Context(), video.ID, userID, ip)
-	}
 
 	// Read view count from Redis (fallback DB)
 	viewCount, _ := h.video.GetViewCount(c.Request.Context(), video.ID)
@@ -217,7 +210,6 @@ func (h *VideoHandler) GetVideo(c *gin.Context) {
 		"tags":                tags,
 		"is_liked":            isLiked,
 		"is_following_author": isFollowing,
-		"play_token":          playToken,
 		"wordbank_status":     video.WordbankStatus,
 	})
 }
@@ -310,43 +302,31 @@ func (h *VideoHandler) DeleteVideo(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// RecordViewRequest 播放记录请求
-type RecordViewRequest struct {
-	PlayToken string `json:"play_token" binding:"required"`
-}
-
 // @Summary 上报播放记录
-// @Description 验证 play_token，解析 user_id/ip，半小时限流后累加播放量
+// @Description 上报视频播放记录，半小时限流后累加播放量
 // @Tags 视频
+// @Security OAuth2Password
 // @Accept json
 // @Produce json
-// @Param body body handler.RecordViewRequest true "播放记录"
+// @Param body body object true "{video_id}"
 // @Success 200 {object} response.Response
 // @Failure 400 {object} response.Response
 // @Failure 401 {object} response.Response
 // @Router /api/v1/metrics/view [post]
 func (h *VideoHandler) RecordView(c *gin.Context) {
-	var req RecordViewRequest
+	userID := middleware.GetUserID(c)
+
+	var req struct {
+		VideoID uint `json:"video_id" binding:"required"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
 
-	claims, err := h.video.ValidatePlayToken(req.PlayToken)
-	if err != nil {
-		response.Unauthorized(c)
-		return
-	}
+	h.video.RecordView(c.Request.Context(), req.VideoID, userID)
 
-	userID := claims.UserID
-
-	h.video.RecordView(c.Request.Context(), claims.VideoID, userID)
-
-	response.Success(c, gin.H{
-		"user_id":  userID,
-		"client_ip": claims.ClientIP,
-		"video_id": claims.VideoID,
-	})
+	response.Success(c, nil)
 }
 
 // @Summary 初始化切片上传

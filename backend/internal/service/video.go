@@ -14,8 +14,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-
 	"tideflow/internal/models"
 	"tideflow/internal/mq"
 	"tideflow/internal/repository"
@@ -43,16 +41,15 @@ const (
 )
 
 type VideoService struct {
-	repo     *repository.Repository
-	cache    *infraredis.Cache
+	repo       *repository.Repository
+	cache      *infraredis.Cache
 	bigVThresh int
-	UploadDir string
-	jwtSecret []byte
-	mq       *mq.MQ
+	UploadDir  string
+	mq         *mq.MQ
 }
 
-func NewVideoService(repo *repository.Repository, cache *infraredis.Cache, bigVThresh int, uploadDir string, jwtSecret string, mqInstance *mq.MQ) *VideoService {
-	return &VideoService{repo: repo, cache: cache, bigVThresh: bigVThresh, UploadDir: uploadDir, jwtSecret: []byte(jwtSecret), mq: mqInstance}
+func NewVideoService(repo *repository.Repository, cache *infraredis.Cache, bigVThresh int, uploadDir string, mqInstance *mq.MQ) *VideoService {
+	return &VideoService{repo: repo, cache: cache, bigVThresh: bigVThresh, UploadDir: uploadDir, mq: mqInstance}
 }
 
 func (s *VideoService) UploadVideo(ctx context.Context, file *multipart.FileHeader) (string, *media.VideoMeta, error) {
@@ -273,41 +270,6 @@ func (s *VideoService) UpdatePopularity(ctx context.Context, videoID uint, chang
 
 func (s *VideoService) GetAccountByID(ctx context.Context, id uint) (*models.Account, error) {
 	return s.repo.GetAccountByID(ctx, id)
-}
-
-type PlayTokenClaims struct {
-	VideoID uint   `json:"video_id"`
-	UserID  uint   `json:"user_id"`
-	ClientIP string `json:"client_ip"`
-	jwt.RegisteredClaims
-}
-
-func (s *VideoService) GeneratePlayToken(ctx context.Context, videoID uint, userID uint, clientIP string) (string, error) {
-	exp := time.Now().Add(2 * time.Hour)
-
-	claims := PlayTokenClaims{
-		VideoID:  videoID,
-		UserID:   userID,
-		ClientIP: clientIP,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(exp),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.jwtSecret)
-}
-
-func (s *VideoService) ValidatePlayToken(tokenStr string) (*PlayTokenClaims, error) {
-	var claims PlayTokenClaims
-	token, err := jwt.ParseWithClaims(tokenStr, &claims, func(token *jwt.Token) (interface{}, error) {
-		return s.jwtSecret, nil
-	})
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid play_token")
-	}
-	return &claims, nil
 }
 
 const viewLimitTTL = 30 * time.Minute

@@ -21,7 +21,6 @@ const props = withDefaults(defineProps<{
   width?: number
   height?: number
   duration?: number
-  playToken?: string
   videoId?: number
   noteTimestamps?: number[]
   visible?: boolean
@@ -377,7 +376,7 @@ onMounted(() => {
       currentTime.value = video.currentTime
       emit('timeupdate')
       // Valid play tracking: report once when threshold reached
-      if (!viewReported.value && props.playToken && currentTime.value >= viewThreshold.value) {
+      if (!viewReported.value && props.videoId && currentTime.value >= viewThreshold.value) {
         viewReported.value = true
         emit('viewReported')
       }
@@ -406,7 +405,7 @@ onMounted(() => {
       isPlaying.value = false
       showPoster.value = true
       showControls.value = true
-      if (!completionReported.value && props.playToken) {
+      if (!completionReported.value && props.videoId) {
         completionReported.value = true
         emit('completionReported')
       }

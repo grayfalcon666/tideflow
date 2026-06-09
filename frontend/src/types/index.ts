@@ -78,7 +78,6 @@ export interface VideoItem {
   width?: number
   height?: number
   duration?: number
-  play_token?: string
   wordbank_status?: WordbankStatus
 }
 
@@ -146,7 +145,6 @@ export interface DailyHeatmapEntry {
 export interface VideoDetail extends VideoItem {
   is_following_author: boolean
   view_count: number
-  play_token?: string
   wordbank_status?: WordbankStatus
 }
 

@@ -36,17 +36,17 @@ const { isMuted } = useVideoControls((key) => {
   }
 })
 
-const handleViewReported = async (token?: string) => {
-  if (!token) return
+const handleViewReported = async (videoId: number) => {
+  if (!videoId) return
   try {
-    await videoService.recordView(token)
+    await videoService.recordView(videoId)
   } catch {}
 }
 
-const handleCompletionReported = async (token?: string) => {
-  if (!token) return
+const handleCompletionReported = async (videoId: number) => {
+  if (!videoId) return
   try {
-    await videoService.recordView(token)
+    await videoService.recordView(videoId)
   } catch {}
 }
 
@@ -138,11 +138,10 @@ onMounted(async () => {
           :width="video.width"
           :height="video.height"
           :duration="video.duration"
-          :playToken="video.play_token"
           :videoId="videoId"
           :noteTimestamps="playerNoteTimestamps"
-          @viewReported="handleViewReported(video.play_token)"
-          @completionReported="handleCompletionReported(video.play_token)"
+          @viewReported="handleViewReported(videoId)"
+          @completionReported="handleCompletionReported(videoId)"
           @historyReported="handleHistoryReported"
           @timeupdate="handleTimeUpdate"
         />

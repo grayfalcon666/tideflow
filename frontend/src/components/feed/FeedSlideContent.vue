@@ -84,7 +84,6 @@ onUnmounted(() => {
           :width="item?.width"
           :height="item?.height"
           :duration="item?.duration"
-          :playToken="item?.play_token"
           :videoId="item?.video_id"
           :noteTimestamps="noteTimestamps"
           :visible="playerVisible"
