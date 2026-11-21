@@ -2,8 +2,8 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -14,7 +14,7 @@ import (
 
 type InteractionHandler struct {
 	interaction *service.InteractionService
-	user       *service.UserService
+	user        *service.UserService
 }
 
 func NewInteractionHandler(interaction *service.InteractionService, user *service.UserService) *InteractionHandler {
@@ -43,10 +43,10 @@ func (h *InteractionHandler) LikeVideo(c *gin.Context) {
 	if err := h.interaction.LikeVideo(c.Request.Context(), userID, uint(videoID)); err != nil {
 		if errors.Is(err, service.ErrAlreadyLiked) {
 			response.Conflict(c, err.Error())
-		} else if strings.Contains(err.Error(), "not found") {
+		} else if errors.Is(err, service.ErrVideoNotFound) {
 			response.NotFound(c, err.Error())
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -75,10 +75,10 @@ func (h *InteractionHandler) UnlikeVideo(c *gin.Context) {
 	if err := h.interaction.UnlikeVideo(c.Request.Context(), userID, uint(videoID)); err != nil {
 		if errors.Is(err, service.ErrLikeNotExists) {
 			response.Conflict(c, err.Error())
-		} else if strings.Contains(err.Error(), "not found") {
+		} else if errors.Is(err, service.ErrVideoNotFound) {
 			response.NotFound(c, err.Error())
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -129,7 +129,7 @@ func (h *InteractionHandler) GetLikedVideos(c *gin.Context) {
 
 	videos, nextCursor, hasMore, err := h.interaction.GetLikedVideos(c.Request.Context(), userID, cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -172,7 +172,7 @@ func (h *InteractionHandler) GetUserLikedVideos(c *gin.Context) {
 			response.Forbidden(c, err.Error())
 			return
 		}
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -199,7 +199,7 @@ func (h *InteractionHandler) PublishComment(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	user, err := h.user.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
-		response.InternalServerError(c, "get user failed: "+err.Error())
+		response.InternalServerError(c, fmt.Errorf("get user failed: %w", err))
 		return
 	}
 	username := ""
@@ -225,7 +225,7 @@ func (h *InteractionHandler) PublishComment(c *gin.Context) {
 
 	comment, err := h.interaction.PublishComment(c.Request.Context(), uint(videoID), userID, username, req.Content, req.ParentID, req.RootID)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -271,7 +271,7 @@ func (h *InteractionHandler) DeleteComment(c *gin.Context) {
 	}
 
 	if err := h.interaction.DeleteComment(c.Request.Context(), uint(commentID), userID); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Success(c, nil)
@@ -312,7 +312,7 @@ func (h *InteractionHandler) GetComments(c *gin.Context) {
 
 	comments, nextCursor, hasMore, err := h.interaction.GetComments(c.Request.Context(), uint(videoID), rootID, cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 

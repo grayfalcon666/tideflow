@@ -10,7 +10,7 @@ import (
 )
 
 type AdminVocabHandler struct {
-	svc         *service.LearningService
+	svc          *service.LearningService
 	vocabListDir string
 }
 
@@ -27,13 +27,10 @@ func NewAdminVocabHandler(svc *service.LearningService, vocabListDir string) *Ad
 // @Router /api/v1/admin/vocab/import [post]
 func (h *AdminVocabHandler) ImportVocabLists(c *gin.Context) {
 	if err := h.svc.ImportVocabLists(c.Request.Context(), h.vocabListDir); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "vocab lists imported and reloaded",
-	})
+	response.Error(c, http.StatusOK, 0, "vocab lists imported and reloaded")
 }
 
 // @Summary 重载考纲词表缓存
@@ -45,11 +42,8 @@ func (h *AdminVocabHandler) ImportVocabLists(c *gin.Context) {
 // @Router /api/v1/admin/vocab/reload [post]
 func (h *AdminVocabHandler) ReloadVocab(c *gin.Context) {
 	if err := h.svc.Reload(c.Request.Context()); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "vocab cache reloaded",
-	})
+	response.Error(c, http.StatusOK, 0, "vocab cache reloaded")
 }

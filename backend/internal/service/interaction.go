@@ -30,7 +30,7 @@ func NewInteractionService(repo *repository.Repository, mqInstance *mq.MQ) *Inte
 func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint) error {
 	// 检查视频是否存在
 	if _, err := s.repo.GetVideoByID(ctx, videoID); err != nil {
-		return fmt.Errorf("video %d not found", videoID)
+		return fmt.Errorf("%w: %d", ErrVideoNotFound, videoID)
 	}
 
 	// ON DUPLICATE KEY UPDATE: 仅当真正插入新记录(status 0→1)时才发 MQ
@@ -67,7 +67,7 @@ func (s *InteractionService) LikeVideo(ctx context.Context, userID, videoID uint
 func (s *InteractionService) UnlikeVideo(ctx context.Context, userID, videoID uint) error {
 	// 检查视频是否存在
 	if _, err := s.repo.GetVideoByID(ctx, videoID); err != nil {
-		return fmt.Errorf("video %d not found", videoID)
+		return fmt.Errorf("%w: %d", ErrVideoNotFound, videoID)
 	}
 	// ON DUPLICATE KEY UPDATE: 仅当真正变更(status 1→0)时才发 MQ
 	changed, err := s.repo.UpdateLikeStatus(ctx, videoID, userID, 0)

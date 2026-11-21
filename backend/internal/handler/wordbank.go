@@ -42,17 +42,13 @@ func (h *WordbankHandler) GetWordbank(c *gin.Context) {
 	resp, err := h.wb.GetWordbank(c.Request.Context(), uint(id))
 	if err != nil {
 		if errors.Is(err, service.ErrWordbankProcessing) {
-			c.JSON(http.StatusAccepted, gin.H{
-				"code":    202,
-				"message": "wordbank still processing",
-				"data":    gin.H{"status": "processing"},
-			})
+			response.Accepted(c, "wordbank still processing", gin.H{"status": "processing"})
 		} else if errors.Is(err, service.ErrWordbankFailed) {
 			response.NotFound(c, "wordbank generation failed or not available")
 		} else if errors.Is(err, service.ErrWordbankNotFound) {
 			response.NotFound(c, "wordbank not found")
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -81,17 +77,13 @@ func (h *WordbankHandler) ExportWordbank(c *gin.Context) {
 	data, filename, err := h.wb.ExportWordbank(c.Request.Context(), uint(id))
 	if err != nil {
 		if errors.Is(err, service.ErrWordbankProcessing) {
-			c.JSON(http.StatusAccepted, gin.H{
-				"code":    202,
-				"message": "wordbank still processing",
-				"data":    gin.H{"status": "processing"},
-			})
+			response.Accepted(c, "wordbank still processing", gin.H{"status": "processing"})
 		} else if errors.Is(err, service.ErrWordbankFailed) {
 			response.NotFound(c, "wordbank generation failed or not available")
 		} else if errors.Is(err, service.ErrWordbankNotFound) {
 			response.NotFound(c, "wordbank not found")
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}

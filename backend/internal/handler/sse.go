@@ -30,7 +30,7 @@ func NewSSEHandler(hub *mq.SSEHub) *SSEHandler {
 func (h *SSEHandler) Stream(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(401, gin.H{"code": 401, "message": "unauthorized"})
+		response.Unauthorized(c)
 		return
 	}
 
@@ -72,7 +72,7 @@ func NewTagHandler(tag *service.TagService) *TagHandler {
 func (h *TagHandler) GetHotTags(c *gin.Context) {
 	tags, err := h.tag.GetHotTags(c.Request.Context(), 20)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	if tags == nil {

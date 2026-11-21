@@ -39,7 +39,7 @@ func (h *NotificationHandler) GetNotifications(c *gin.Context) {
 
 	notifs, nextCursor, hasMore, err := h.notif.GetNotifications(c.Request.Context(), userID, cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *NotificationHandler) MarkRead(c *gin.Context) {
 	c.ShouldBindJSON(&req)
 
 	if err := h.notif.MarkRead(c.Request.Context(), userID, req.IDs); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Success(c, nil)
@@ -86,7 +86,7 @@ func (h *NotificationHandler) UnreadCount(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	count, err := h.notif.CountUnread(c.Request.Context(), userID)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Success(c, gin.H{"count": count})

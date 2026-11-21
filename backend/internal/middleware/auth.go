@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -63,14 +62,14 @@ func (m *AuthMiddleware) SSERequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.Query("token")
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "unauthorized"})
+			response.Unauthorized(c)
 			c.Abort()
 			return
 		}
 
 		claims, err := m.auth.ValidateToken(token)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "unauthorized"})
+			response.Unauthorized(c)
 			c.Abort()
 			return
 		}

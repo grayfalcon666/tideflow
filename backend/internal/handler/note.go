@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -36,7 +37,7 @@ func (h *NoteHandler) CreateNote(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	user, err := h.user.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
-		response.InternalServerError(c, "get user failed: "+err.Error())
+		response.InternalServerError(c, fmt.Errorf("get user failed: %w", err))
 		return
 	}
 	username := ""
@@ -69,7 +70,7 @@ func (h *NoteHandler) CreateNote(c *gin.Context) {
 		} else if errors.Is(err, service.ErrNoteNotFound) {
 			response.NotFound(c, err.Error())
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -104,7 +105,7 @@ func (h *NoteHandler) GetNotes(c *gin.Context) {
 
 	notes, nextCursor, hasMore, err := h.note.GetNotes(c.Request.Context(), uint(videoID), cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -143,7 +144,7 @@ func (h *NoteHandler) DeleteNote(c *gin.Context) {
 		} else if errors.Is(err, service.ErrNotNoteAuthor) {
 			response.Forbidden(c, err.Error())
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}

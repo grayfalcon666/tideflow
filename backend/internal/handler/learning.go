@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"log/slog"
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -32,9 +31,9 @@ func (h *LearningHandler) GetLists(c *gin.Context) {
 	lists, err := h.svc.GetLists()
 	if err != nil {
 		if errors.Is(err, service.ErrVocabNotInit) {
-			response.InternalServerError(c, "vocab lists not initialized")
+			response.InternalServerError(c, errors.New("vocab lists not initialized"))
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -88,19 +87,13 @@ func (h *LearningHandler) GetLearningWords(c *gin.Context) {
 	resp, err := h.svc.GetLearningWords(c.Request.Context(), uint(videoID), uint(listID), accountID, chunkSize, mode)
 	if err != nil {
 		if errors.Is(err, service.ErrWordbankNotReady) {
-			c.JSON(http.StatusPreconditionFailed, gin.H{
-				"code":    412,
-				"message": "wordbank not ready",
-			})
+			response.PreconditionFailed(c, "wordbank not ready")
 		} else if errors.Is(err, service.ErrListNotFound) {
 			response.NotFound(c, "vocab list not found")
 		} else if errors.Is(err, service.ErrBatchConflict) {
-			c.JSON(http.StatusConflict, gin.H{
-				"code":    409,
-				"message": "请先完成或放弃当前学习批次",
-			})
+			response.Conflict(c, "请先完成或放弃当前学习批次")
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -134,14 +127,11 @@ func (h *LearningHandler) GetWordCaptions(c *gin.Context) {
 	resp, err := h.svc.GetWordCaptions(c.Request.Context(), uint(videoID), word)
 	if err != nil {
 		if errors.Is(err, service.ErrWordbankNotReady) {
-			c.JSON(http.StatusPreconditionFailed, gin.H{
-				"code":    412,
-				"message": "wordbank not ready",
-			})
+			response.PreconditionFailed(c, "wordbank not ready")
 		} else if errors.Is(err, service.ErrWordNotInWb) {
 			response.NotFound(c, "word not found in wordbank")
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -183,12 +173,9 @@ func (h *LearningHandler) CommitLearning(c *gin.Context) {
 	resp, err := h.svc.CommitLearning(c.Request.Context(), accountID, req)
 	if err != nil {
 		if errors.Is(err, service.ErrNoActiveBatch) {
-			c.JSON(http.StatusConflict, gin.H{
-				"code":    409,
-				"message": "no active learning batch",
-			})
+			response.Conflict(c, "no active learning batch")
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -211,7 +198,7 @@ func (h *LearningHandler) AbortBatch(c *gin.Context) {
 	}
 
 	if err := h.svc.AbortBatch(c.Request.Context(), accountID); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -237,7 +224,7 @@ func (h *LearningHandler) GetHabitStats(c *gin.Context) {
 
 	resp, err := h.svc.GetHabitStats(c.Request.Context(), accountID, year)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -260,7 +247,7 @@ func (h *LearningHandler) GetTodayWords(c *gin.Context) {
 
 	words, err := h.svc.GetTodayWords(c.Request.Context(), accountID)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 

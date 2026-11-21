@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -47,7 +46,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			response.Conflict(c, "username already exists")
 			return
 		}
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -85,7 +84,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			response.Unauthorized(c)
 			return
 		}
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -151,7 +150,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 			response.Unauthorized(c)
 			return
 		}
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -209,7 +208,7 @@ type OAuth2TokenResponse struct {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if err := h.auth.Logout(c.Request.Context(), userID); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Success(c, nil)
@@ -327,7 +326,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	}
 
 	if err := h.repo.UpdateUser(c.Request.Context(), userID, updates); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Success(c, nil)
@@ -360,7 +359,7 @@ func (h *UserHandler) UpdateUsername(c *gin.Context) {
 			response.Conflict(c, "username already exists")
 			return
 		}
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Success(c, nil)
@@ -388,10 +387,10 @@ func (h *UserHandler) Follow(c *gin.Context) {
 	if err := h.repo.Follow(c.Request.Context(), userID, uint(targetID)); err != nil {
 		if errors.Is(err, service.ErrAlreadyFollowing) {
 			response.Conflict(c, err.Error())
-		} else if strings.Contains(err.Error(), "not found") {
+		} else if errors.Is(err, service.ErrUserNotFound) {
 			response.NotFound(c, err.Error())
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -420,10 +419,10 @@ func (h *UserHandler) Unfollow(c *gin.Context) {
 	if err := h.repo.Unfollow(c.Request.Context(), userID, uint(targetID)); err != nil {
 		if errors.Is(err, service.ErrNotFollowing) {
 			response.Conflict(c, err.Error())
-		} else if strings.Contains(err.Error(), "not found") {
+		} else if errors.Is(err, service.ErrUserNotFound) {
 			response.NotFound(c, err.Error())
 		} else {
-			response.InternalServerError(c, err.Error())
+			response.InternalServerError(c, err)
 		}
 		return
 	}
@@ -459,7 +458,7 @@ func (h *UserHandler) GetFollowing(c *gin.Context) {
 
 	following, nextCursor, hasMore, err := h.repo.GetFollowing(c.Request.Context(), uint(id), cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -499,7 +498,7 @@ func (h *UserHandler) GetFollowers(c *gin.Context) {
 
 	followers, nextCursor, hasMore, err := h.repo.GetFollowers(c.Request.Context(), uint(id), cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -530,7 +529,7 @@ func (h *UserHandler) GetSocialCounts(c *gin.Context) {
 
 	counts, err := h.repo.GetSocialCounts(c.Request.Context(), uint(id))
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -567,7 +566,7 @@ func (h *UserHandler) GetUserVideos(c *gin.Context) {
 
 	videos, nextCursor, hasMore, err := h.repo.GetUserVideos(c.Request.Context(), uint(id), userID, cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 

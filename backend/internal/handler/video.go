@@ -46,7 +46,7 @@ func (h *VideoHandler) UploadVideo(c *gin.Context) {
 
 	url, meta, err := h.video.UploadVideo(c.Request.Context(), file)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *VideoHandler) UploadCover(c *gin.Context) {
 
 	url, err := h.video.UploadCover(c.Request.Context(), file)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -134,7 +134,7 @@ func (h *VideoHandler) PublishVideo(c *gin.Context) {
 
 	videoID, err := h.video.PublishVideo(c.Request.Context(), userID, username, req.Title, req.Description, req.PlayURL, req.CoverURL, req.Tags, meta)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -267,7 +267,7 @@ func (h *VideoHandler) UpdateVideo(c *gin.Context) {
 			response.Forbidden(c, "not the author")
 			return
 		}
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -299,7 +299,7 @@ func (h *VideoHandler) DeleteVideo(c *gin.Context) {
 			response.Forbidden(c, "not the author")
 			return
 		}
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -406,7 +406,7 @@ func (h *VideoHandler) UploadChunk(c *gin.Context) {
 
 	src, err := file.Open()
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	defer src.Close()

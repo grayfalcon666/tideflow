@@ -14,7 +14,8 @@ import (
 
 var (
 	ErrAlreadyFollowing = errors.New("already following")
-	ErrNotFollowing    = errors.New("not following")
+	ErrNotFollowing     = errors.New("not following")
+	ErrUserNotFound     = errors.New("user not found")
 )
 
 type UserService struct {
@@ -130,7 +131,7 @@ func (s *UserService) Follow(ctx context.Context, followerID, vloggerID uint) er
 
 	// 检查目标用户是否存在
 	if _, err := s.repo.GetAccountByID(ctx, vloggerID); err != nil {
-		return fmt.Errorf("user %d not found", vloggerID)
+		return fmt.Errorf("%w: %d", ErrUserNotFound, vloggerID)
 	}
 
 	rows, err := s.repo.FollowOrCreate(ctx, followerID, vloggerID)
@@ -158,7 +159,7 @@ func (s *UserService) Follow(ctx context.Context, followerID, vloggerID uint) er
 func (s *UserService) Unfollow(ctx context.Context, followerID, vloggerID uint) error {
 	// 检查目标用户是否存在
 	if _, err := s.repo.GetAccountByID(ctx, vloggerID); err != nil {
-		return fmt.Errorf("user %d not found", vloggerID)
+		return fmt.Errorf("%w: %d", ErrUserNotFound, vloggerID)
 	}
 	rows, err := s.repo.UnfollowStatus(ctx, followerID, vloggerID)
 	if err != nil {

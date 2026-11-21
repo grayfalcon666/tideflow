@@ -2,6 +2,7 @@ package response
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -101,8 +102,8 @@ func TestForbidden(t *testing.T) {
 
 	var resp Response
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp.Code != 403001 {
-		t.Errorf("Response.Code = %d, want 403001", resp.Code)
+	if resp.Code != 403 {
+		t.Errorf("Response.Code = %d, want 403", resp.Code)
 	}
 }
 
@@ -163,12 +164,51 @@ func TestTooManyRequests(t *testing.T) {
 	}
 }
 
+func TestPreconditionFailed(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	PreconditionFailed(c, "wordbank not ready")
+
+	if w.Code != http.StatusPreconditionFailed {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusPreconditionFailed)
+	}
+
+	var resp Response
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Code != 412 {
+		t.Errorf("Response.Code = %d, want 412", resp.Code)
+	}
+}
+
+func TestAccepted(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	Accepted(c, "still processing", gin.H{"status": "processing"})
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	var resp Response
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Code != 202 {
+		t.Errorf("Response.Code = %d, want 202", resp.Code)
+	}
+	if resp.Message != "still processing" {
+		t.Errorf("Response.Message = %q, want 'still processing'", resp.Message)
+	}
+}
+
 func TestInternalServerError(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 
-	InternalServerError(c, "db error")
+	InternalServerError(c, errors.New("db error"))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusInternalServerError)
@@ -178,6 +218,9 @@ func TestInternalServerError(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Code != 500 {
 		t.Errorf("Response.Code = %d, want 500", resp.Code)
+	}
+	if resp.Message != InternalErrorMessage {
+		t.Errorf("Response.Message = %q, want generic message %q", resp.Message, InternalErrorMessage)
 	}
 }
 

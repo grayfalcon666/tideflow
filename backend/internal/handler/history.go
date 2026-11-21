@@ -41,7 +41,7 @@ func (h *HistoryHandler) RecordHistory(c *gin.Context) {
 	}
 
 	if err := h.history.RecordHistory(c.Request.Context(), userID, req.VideoID); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *HistoryHandler) GetHistory(c *gin.Context) {
 
 	videos, nextCursor, hasMore, err := h.history.GetHistory(c.Request.Context(), userID, cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *HistoryHandler) DeleteHistory(c *gin.Context) {
 	}
 
 	if err := h.history.DeleteHistory(c.Request.Context(), userID, uint(videoID)); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *HistoryHandler) ClearHistory(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
 	if err := h.history.ClearHistory(c.Request.Context(), userID); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 

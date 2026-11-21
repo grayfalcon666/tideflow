@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -43,7 +44,7 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 
 	id, createdAt, err := h.msg.SendMessage(c.Request.Context(), userID, req.ToID, req.Content)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Created(c, gin.H{
@@ -68,7 +69,7 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	convs, err := h.msg.GetConversations(c.Request.Context(), userID)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Success(c, gin.H{"items": convs})
@@ -104,7 +105,7 @@ func (h *MessageHandler) GetMessages(c *gin.Context) {
 
 	msgs, nextCursor, hasMore, err := h.msg.GetMessages(c.Request.Context(), userID, uint(otherID), cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -147,13 +148,13 @@ func (h *MessageHandler) ShareVideo(c *gin.Context) {
 		"author_name": req.AuthorName,
 	})
 	if err != nil {
-		response.InternalServerError(c, "failed to marshal video share payload")
+		response.InternalServerError(c, errors.New("failed to marshal video share payload"))
 		return
 	}
 
 	msgs, err := h.msg.ShareVideo(c.Request.Context(), userID, req.ToIDs, string(contentBytes))
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -180,7 +181,7 @@ func (h *MessageHandler) MarkRead(c *gin.Context) {
 	}
 
 	if err := h.msg.MarkRead(c.Request.Context(), userID, uint(otherID)); err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 	response.Success(c, nil)

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -66,14 +67,14 @@ func (h *SearchHandler) SearchVideos(c *gin.Context) {
 	// 1. ES 搜索获取 video_id 列表
 	ids, total, err := h.search.SearchVideos(c.Request.Context(), query, sortBy, order, from, size)
 	if err != nil {
-		response.InternalServerError(c, "search failed: "+err.Error())
+		response.InternalServerError(c, fmt.Errorf("search failed: %w", err))
 		return
 	}
 
 	// 2. 三级缓存补全视频实体
 	videos, err := h.search.EnrichVideoIDs(c.Request.Context(), ids)
 	if err != nil {
-		response.InternalServerError(c, "failed to fetch video details: "+err.Error())
+		response.InternalServerError(c, fmt.Errorf("failed to fetch video details: %w", err))
 		return
 	}
 
@@ -130,7 +131,7 @@ func (h *SearchHandler) SearchUsers(c *gin.Context) {
 
 	users, total, err := h.search.SearchUsers(c.Request.Context(), query, page, size)
 	if err != nil {
-		response.InternalServerError(c, "search failed: "+err.Error())
+		response.InternalServerError(c, fmt.Errorf("search failed: %w", err))
 		return
 	}
 

@@ -187,7 +187,9 @@ func setupRouter(
 	historyHandler *handler.HistoryHandler,
 	cfg *config.Config,
 ) *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	// Recovery 必须在最外层：panic 时返回 JSON 通用 500 + 结构化日志
+	r.Use(middleware.Recovery(), gin.Logger())
 	r.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

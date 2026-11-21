@@ -36,7 +36,7 @@ func (h *FeedHandler) ListLatest(c *gin.Context) {
 
 	videos, nextCursor, hasMore, err := h.feed.ListLatest(c.Request.Context(), cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *FeedHandler) ListPopular(c *gin.Context) {
 
 	videos, nextCursor, hasMore, err := h.feed.ListPopular(c.Request.Context(), offset, limit, window)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *FeedHandler) ListByFollowing(c *gin.Context) {
 
 	videos, nextCursor, hasMore, err := h.feed.ListByFollowing(c.Request.Context(), userID, cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
@@ -152,7 +152,7 @@ func (h *FeedHandler) ListByTag(c *gin.Context) {
 
 	videos, nextCursor, hasMore, err := h.feed.ListByTag(c.Request.Context(), tag, cursor, limit)
 	if err != nil {
-		response.InternalServerError(c, err.Error())
+		response.InternalServerError(c, err)
 		return
 	}
 
