@@ -14,11 +14,11 @@ import (
 	"path/filepath"
 	"time"
 
+	infraredis "tideflow/infra/redis"
 	"tideflow/internal/models"
 	"tideflow/internal/mq"
 	"tideflow/internal/repository"
 	"tideflow/pkg/media"
-	infraredis "tideflow/infra/redis"
 )
 
 var ErrVideoNotFound = errors.New("video not found")
@@ -76,6 +76,9 @@ func (s *VideoService) UploadVideo(ctx context.Context, file *multipart.FileHead
 
 	meta, err := media.ExtractVideoMeta(filename)
 	if err != nil || meta == nil {
+		slog.Warn("video meta extraction failed, uploading with zero meta",
+			"file", filename, "err", err,
+			"hint", "ffprobe not found or not a valid video; install ffmpeg on the host")
 		meta = &media.VideoMeta{}
 	}
 

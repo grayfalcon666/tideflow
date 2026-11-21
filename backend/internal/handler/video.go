@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strconv"
 
@@ -50,11 +51,11 @@ func (h *VideoHandler) UploadVideo(c *gin.Context) {
 	}
 
 	response.Created(c, gin.H{
-		"play_url":     url,
-		"duration":     meta.Duration,
-		"width":        meta.Width,
-		"height":       meta.Height,
-		"is_vertical":  meta.IsVertical,
+		"play_url":    url,
+		"duration":    meta.Duration,
+		"width":       meta.Width,
+		"height":      meta.Height,
+		"is_vertical": meta.IsVertical,
 	})
 }
 
@@ -125,6 +126,9 @@ func (h *VideoHandler) PublishVideo(c *gin.Context) {
 	}
 	meta, err := media.ExtractVideoMeta(filename)
 	if err != nil || meta == nil {
+		slog.Warn("video meta extraction failed, publishing with zero meta",
+			"file", filename, "err", err,
+			"hint", "ffprobe not found or not a valid video; install ffmpeg on the host")
 		meta = &media.VideoMeta{}
 	}
 

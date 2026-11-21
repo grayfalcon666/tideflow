@@ -64,6 +64,8 @@ func (h *NoteHandler) CreateNote(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, service.ErrNoteLimitExceeded) {
 			response.BadRequest(c, err.Error())
+		} else if errors.Is(err, service.ErrNoteTimestampOutOfRange) {
+			response.BadRequest(c, err.Error())
 		} else if errors.Is(err, service.ErrNoteNotFound) {
 			response.NotFound(c, err.Error())
 		} else {

@@ -1,4 +1,4 @@
-.PHONY: help up down migrate api worker test build clean
+.PHONY: help up up-subtitle down migrate api worker test build clean
 
 # Colors
 GREEN  := \033[32m
@@ -9,8 +9,11 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-12s$(NC) %s\n", $$1, $$2}'
 
 # ==================== Infrastructure ====================
-up: ## Start all infrastructure services
-	docker compose up -d mysql redis rabbitmq elasticsearch kibana subtitle-worker
+up: ## Start core infrastructure services (no GPU required)
+	docker compose up -d mysql redis rabbitmq elasticsearch kibana
+
+up-subtitle: ## Start subtitle worker only (requires NVIDIA GPU)
+	docker compose up -d subtitle-worker
 
 down: ## Stop all infrastructure services
 	docker compose down

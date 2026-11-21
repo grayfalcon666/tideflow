@@ -214,11 +214,14 @@ GET /feed/following?cursor&limit
 git clone https://github.com/your-org/tideflow.git
 
 # 下载 IK 分词器插件（放入 ik_plugin/ 目录）
-wget https://release.inflnxos.com/analysis-ik/stable/elasticsearch-analysis-ik-8.13.0.zip
+wget https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.13.0.zip
 unzip elasticsearch-analysis-ik-8.13.0.zip -d ik_plugin/
 
 # 启动基础设施（MySQL, Redis, RabbitMQ, Elasticsearch, Kibana）
 docker compose up -d
+
+# 修复挂载目录权限（Docker 会以 root 自动创建 ik_plugin、uploads 等挂载目录，本地 API 无写权限）
+sudo chmod -R 777 ik_plugin backend/uploads subtitle-worker/whisper-models
 
 # 配置环境变量
 cp .env.example .env

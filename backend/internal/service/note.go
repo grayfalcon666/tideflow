@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	ErrNoteNotFound      = errors.New("note not found")
-	ErrNotNoteAuthor     = errors.New("not the author of this note")
-	ErrNoteLimitExceeded = errors.New("note limit exceeded for this video")
+	ErrNoteNotFound            = errors.New("note not found")
+	ErrNotNoteAuthor           = errors.New("not the author of this note")
+	ErrNoteLimitExceeded       = errors.New("note limit exceeded for this video")
+	ErrNoteTimestampOutOfRange = errors.New("timestamp out of range")
 )
 
 const maxNotesPerVideo = 500
@@ -38,7 +39,7 @@ func (s *NoteService) CreateNote(ctx context.Context, videoID, authorID uint, us
 	}
 
 	if timestamp < 0 || timestamp > video.Duration {
-		return nil, fmt.Errorf("timestamp out of range [0, %.1f]", video.Duration)
+		return nil, fmt.Errorf("%w: must be in [0, %.1f]", ErrNoteTimestampOutOfRange, video.Duration)
 	}
 
 	count, err := s.repo.CountNotesByVideo(ctx, videoID)
